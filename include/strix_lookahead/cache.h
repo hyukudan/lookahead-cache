@@ -20,7 +20,10 @@ typedef enum sl_status {
     SL_INVALID_ARGUMENT = 4,
     SL_STALE_LEASE = 5,
     SL_ALLOCATION_FAILED = 6,
-    SL_OVERFLOW = 7
+    SL_OVERFLOW = 7,
+    SL_DEVICE_ERROR = 8,
+    SL_UNSUPPORTED = 9,
+    SL_INVALID_STATE = 10
 } sl_status;
 
 /* Opaque caller-supplied identities. vocabulary identifies the ORDERED mapping.

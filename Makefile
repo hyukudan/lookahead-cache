@@ -3,12 +3,12 @@ CC ?= cc
 AR ?= ar
 CPPFLAGS += -Iinclude
 CXXFLAGS ?= -O2 -g
-CXXFLAGS += -std=c++20 -Wall -Wextra -Wpedantic
+override CXXFLAGS += -std=c++20 -Wall -Wextra -Wpedantic -ffp-contract=off -fno-fast-math
 CFLAGS ?= -O2 -g
 CFLAGS += -std=c11 -Wall -Wextra -Wpedantic
 BUILD_DIR ?= build-make
 
-.PHONY: all test example clean
+.PHONY: all test example benchmark clean
 all: $(BUILD_DIR)/libstrix_lookahead.a
 
 $(BUILD_DIR):
@@ -17,10 +17,22 @@ $(BUILD_DIR):
 $(BUILD_DIR)/cache.o: src/cache.cpp include/strix_lookahead/cache.h | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/libstrix_lookahead.a: $(BUILD_DIR)/cache.o
-	$(AR) rcs $@ $<
+$(BUILD_DIR)/pair.o: src/pair.cpp include/strix_lookahead/pair.h include/strix_lookahead/cache.h | $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/selection.o: src/selection.cpp include/strix_lookahead/selection.h include/strix_lookahead/cache.h | $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/libstrix_lookahead.a: $(BUILD_DIR)/cache.o $(BUILD_DIR)/pair.o $(BUILD_DIR)/selection.o
+	$(AR) rcs $@ $^
 
 $(BUILD_DIR)/sl_cache_test: tests/cache_test.cpp $(BUILD_DIR)/libstrix_lookahead.a
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $< $(BUILD_DIR)/libstrix_lookahead.a $(LDFLAGS) -o $@
+
+$(BUILD_DIR)/sl_pair_test: tests/pair_test.cpp $(BUILD_DIR)/libstrix_lookahead.a
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $< $(BUILD_DIR)/libstrix_lookahead.a $(LDFLAGS) -o $@
+
+$(BUILD_DIR)/sl_selection_test: tests/selection_test.cpp $(BUILD_DIR)/libstrix_lookahead.a
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $< $(BUILD_DIR)/libstrix_lookahead.a $(LDFLAGS) -o $@
 
 $(BUILD_DIR)/c_api_smoke.o: tests/c_api_smoke.c include/strix_lookahead/cache.h | $(BUILD_DIR)
@@ -32,12 +44,20 @@ $(BUILD_DIR)/sl_c_api_smoke: $(BUILD_DIR)/c_api_smoke.o $(BUILD_DIR)/libstrix_lo
 $(BUILD_DIR)/sl_cache_example: examples/cache_example.cpp $(BUILD_DIR)/libstrix_lookahead.a
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $< $(BUILD_DIR)/libstrix_lookahead.a $(LDFLAGS) -o $@
 
-test: $(BUILD_DIR)/sl_cache_test $(BUILD_DIR)/sl_c_api_smoke
+test: $(BUILD_DIR)/sl_cache_test $(BUILD_DIR)/sl_pair_test $(BUILD_DIR)/sl_selection_test $(BUILD_DIR)/sl_c_api_smoke
 	$(BUILD_DIR)/sl_cache_test
+	$(BUILD_DIR)/sl_pair_test
+	$(BUILD_DIR)/sl_selection_test
 	$(BUILD_DIR)/sl_c_api_smoke
 
 example: $(BUILD_DIR)/sl_cache_example
 	$(BUILD_DIR)/sl_cache_example
+
+$(BUILD_DIR)/sl_pair_benchmark: examples/pair_benchmark.cpp $(BUILD_DIR)/libstrix_lookahead.a
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $< $(BUILD_DIR)/libstrix_lookahead.a $(LDFLAGS) -o $@
+
+benchmark: $(BUILD_DIR)/sl_pair_benchmark
+	$(BUILD_DIR)/sl_pair_benchmark
 
 clean:
 	rm -rf -- $(BUILD_DIR)

@@ -143,6 +143,9 @@ const char* sl_status_string(sl_status status) {
         case SL_STALE_LEASE: return "stale lease";
         case SL_ALLOCATION_FAILED: return "allocation failed";
         case SL_OVERFLOW: return "overflow";
+        case SL_DEVICE_ERROR: return "device error";
+        case SL_UNSUPPORTED: return "unsupported";
+        case SL_INVALID_STATE: return "invalid state";
     }
     return "unknown status";
 }

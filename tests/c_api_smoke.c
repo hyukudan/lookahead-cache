@@ -1,4 +1,7 @@
 #include "strix_lookahead/cache.h"
+#include "strix_lookahead/pair.h"
+#include "strix_lookahead/selection.h"
+#include "strix_lookahead/device.h"
 
 #include <stdio.h>
 #include <string.h>
