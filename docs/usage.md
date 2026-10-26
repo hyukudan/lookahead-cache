@@ -1,6 +1,6 @@
-# Build and use StrixLookahead
+# Build and use LookaheadCache
 
-All commands below run from this repository's root. StrixLookahead is a library;
+All commands below run from this repository's root. LookaheadCache is a library;
 the examples exercise its operators with synthetic arrays. Start with the CPU
 reference to learn the API, then build the backend required by the application.
 
@@ -25,9 +25,10 @@ tokens `11`, `7`, `3`, with miss/hit/hit cache results. Resetting then produces
 another miss. Every step checks selection and bias bits against capacity zero.
 This is a small API fixture, independent of model loaders and GPU runtimes.
 
-The host build exports `StrixLookahead::cache`. This target includes the host
+The host build exports `LookaheadCache::cache`. This target includes the host
 cache, pair reference and certified selector, despite its short target name.
 Public declarations are in [`include/strix_lookahead`](../include/strix_lookahead).
+For source compatibility the C headers remain under `strix_lookahead/` and keep the `sl_` prefix.
 
 ## HIP build for Strix Halo
 
@@ -49,7 +50,7 @@ ctest --test-dir build-hip --output-on-failure
 ```
 
 Set runtime library search paths as required by the selected SDK. This build adds
-`StrixLookahead::hip`, `sl_hip_test` and `sl_hip_benchmark`. Compilation alone
+`LookaheadCache::hip`, `sl_hip_test` and `sl_hip_benchmark`. Compilation alone
 does not exercise the device. CTest records an unavailable device test as skipped
 through exit 77; use the [qualification collector](benchmarks.md#hip-and-cuda)
 to preserve an explicit `unavailable` result.
@@ -74,7 +75,7 @@ ctest --test-dir build-cuda --output-on-failure
 ```
 
 If multiple toolkits are installed, select `CMAKE_CUDA_COMPILER` and
-`CUDAToolkit_ROOT` explicitly. This build adds `StrixLookahead::cuda`,
+`CUDAToolkit_ROOT` explicitly. This build adds `LookaheadCache::cuda`,
 `sl_cuda_test` and `sl_cuda_benchmark`. HIP and CUDA APIs share the pair contract,
 but each requires its own native correctness and performance measurements.
 
@@ -97,6 +98,9 @@ Link the desired exported target in the application; see the complete
 The library is static and uses a C++ runtime even through its C ABI. A C-only
 application must link with a C++ linker; the included
 [consumer example](../tests/consumer/CMakeLists.txt) sets `LINKER_LANGUAGE CXX`.
+The old package name `StrixLookahead` remains a deprecated compatibility package.
+Set `SL_TEST_LEGACY_PACKAGE=ON` when configuring the consumer example, or pass
+`-DSL_TEST_LEGACY_PACKAGE=ON` to `tests/install_consumer.cmake`, to test it.
 
 ## Build options
 

@@ -1,6 +1,6 @@
 # Repository scope
 
-StrixLookahead is a standalone optimization library. Keep its source tree focused
+LookaheadCache is a standalone optimization library. Keep its source tree focused
 on the library, public API, examples, tests, benchmarks and integration guidance.
 Document the method with primary research references and preserve reproducible
 project-owned measurements separately from performance reported in papers.

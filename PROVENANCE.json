@@ -1,9 +1,10 @@
 {
   "schema_version": 1,
-  "project": "StrixLookahead",
+  "project": "LookaheadCache",
   "version": "0.4.1",
   "distribution": "standalone_optimization_library",
-  "repository": "https://github.com/hyukudan/strix-lookahead",
+  "repository": "https://github.com/hyukudan/lookahead-cache",
+  "former_names": ["StrixLookahead (repository strix-lookahead, <= 0.4.1)"],
   "component_baseline": {
     "commit": "51f2132a3b4d8ff01b54a5726f92499ea04033a3",
     "scope": [

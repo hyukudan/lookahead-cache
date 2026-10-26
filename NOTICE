@@ -1,6 +1,6 @@
-StrixLookahead
+LookaheadCache
 
-This distribution contains the standalone StrixLookahead optimization library,
+This distribution contains the standalone LookaheadCache optimization library,
 its public C API, component examples, tests and qualification tools. The project
 source is licensed under the Apache License, Version 2.0; see LICENSE.
 

@@ -1,6 +1,6 @@
 # Integrate the optimization library
 
-StrixLookahead provides reusable computation and storage components. The caller
+LookaheadCache provides reusable computation and storage components. The caller
 owns model loading, tensor layout conversion, contextual logits, draft policy,
 target verification, attention/KV state, rollback and sampling. Integration is
 specific to the application's numerical and execution contracts.
@@ -9,7 +9,7 @@ specific to the application's numerical and execution contracts.
 
 An optional HIP engine integration is tracked separately in
 [engine PR #54](https://github.com/hyukudan/strix-halo-engine-lab/pull/54).
-It links an installed StrixLookahead package and keeps the engine source and
+It links an installed LookaheadCache package and keeps the engine source and
 model assets in that engine's project. The
 [adapter guide at the reviewed revision](https://github.com/hyukudan/strix-halo-engine-lab/blob/e3dd04342d6101ce03075218757c3d4c8f1150e7/docs/models/deepseek-v4.1/hip-lookahead.md)
 describes the build opt-in, original/uncached/cached runtime modes, memory
@@ -19,6 +19,7 @@ That proposal was compiled against library revision
 `d44244e098c72fb22a09c06c05a54de023037d73` (0.4.1). Its host checks and HIP build
 do not establish native GPU or complete-model correctness/performance. Use it as
 a concrete integration reference, then qualify the intended hardware and workload.
+Records for 0.4.1 and earlier use the former name StrixLookahead.
 
 ## CMake integration
 
@@ -27,31 +28,31 @@ For an installed package:
 ```cmake
 cmake_minimum_required(VERSION 3.21)
 project(MyApplication LANGUAGES C CXX)
-find_package(StrixLookahead 0.4.1 CONFIG REQUIRED COMPONENTS cache)
+find_package(LookaheadCache 0.4.2 CONFIG REQUIRED COMPONENTS cache)
 add_executable(my_application main.cpp)
-target_link_libraries(my_application PRIVATE StrixLookahead::cache)
+target_link_libraries(my_application PRIVATE LookaheadCache::cache)
 ```
 
-Select the `hip` or `cuda` package component and link `StrixLookahead::hip` or
-`StrixLookahead::cuda` when calling that device API. Those targets transitively
+Select the `hip` or `cuda` package component and link `LookaheadCache::hip` or
+`LookaheadCache::cuda` when calling that device API. Those targets transitively
 include the host target and corresponding runtime dependencies. They exist only
 if that backend was built. A C/C++ consumer of the C ABI need not compile its own
 HIP/CUDA translation unit unless the application itself defines device code.
 
-For a source checkout placed at `third_party/strix-lookahead`:
+For a source checkout placed at `third_party/lookahead-cache`:
 
 ```cmake
 set(SL_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(SL_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(SL_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
 set(SL_ENABLE_HIP ON CACHE BOOL "" FORCE)
-add_subdirectory(third_party/strix-lookahead)
-target_link_libraries(my_application PRIVATE StrixLookahead::hip)
+add_subdirectory(third_party/lookahead-cache)
+target_link_libraries(my_application PRIVATE LookaheadCache::hip)
 ```
 
 The parent project sets its HIP compiler, SDK and architecture as in the
 [build guide](usage.md#hip-build-for-strix-halo). For a CPU integration omit
-`SL_ENABLE_HIP` and link `StrixLookahead::cache`; for CUDA select
+`SL_ENABLE_HIP` and link `LookaheadCache::cache`; for CUDA select
 `SL_ENABLE_CUDA` and its target. This repository supplies the library and examples,
 not a prewritten adapter for arbitrary inference engines.
 

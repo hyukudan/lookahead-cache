@@ -1,13 +1,13 @@
-# StrixLookahead
+# LookaheadCache
 
-**Biblioteca independiente de optimizaciones reutilizables de lookahead para inferencia LLM.**
+**Una caché del cabezal de propuestas para decodificación lookahead/especulativa exacta.**
 
-[English](README.md) · [Español](README.es.md) · Versión **0.4.1**
+[English](README.md) · [Español](README.es.md) · Versión **0.4.2**
 
-StrixLookahead contiene una caché host, un operador de pares de rango 256 para
+LookaheadCache contiene una caché host, un operador de pares de rango 256 para
 CPU/HIP/CUDA, un selector certificado experimental en CPU y sus pruebas y
-herramientas de medición. El objetivo principal es AMD Strix Halo; el backend
-CUDA permite integrar el componente en RTX. La aplicación enlaza esta
+herramientas de medición. La primera plataforma es AMD Strix Halo (HIP,
+`gfx1151`), con otros backends que se añaden junto a este. La aplicación enlaza esta
 biblioteca con su propio motor, que se encarga de cargar y ejecutar el modelo,
 verificar las propuestas y aplicar el muestreo.
 
@@ -22,6 +22,14 @@ La [nota sobre el método](docs/method.md) explica el paper de referencia, su
 relación con esta implementación, los cambios realizados y las líneas pendientes. Los
 [resultados registrados](docs/results.md) separan las mediciones y sus límites
 de esas propuestas.
+
+## Backends
+
+AMD Strix Halo (HIP, `gfx1151`) es la primera plataforma. La biblioteca es modular
+para poder añadir otros backends junto a este. Ya incluye un backend CUDA,
+compilado para `86`, `89` y `120`, cuyas ejecuciones nativas siguen pendientes.
+La integración de CUDA en un motor está en curso. El adaptador HIP para el motor
+es la [PR #54](https://github.com/hyukudan/strix-halo-engine-lab/pull/54), aún en borrador.
 
 ## Componentes
 
@@ -43,8 +51,8 @@ por sí solo una aceleración de la inferencia completa.
 Clona este mismo repositorio con una cuenta que tenga acceso:
 
 ```sh
-git clone git@github.com:hyukudan/strix-lookahead.git
-cd strix-lookahead
+git clone git@github.com:hyukudan/lookahead-cache.git
+cd lookahead-cache
 
 cmake -S . -B build-cpu -DCMAKE_BUILD_TYPE=Release
 cmake --build build-cpu --parallel
@@ -68,16 +76,21 @@ cmake --install build-cpu --prefix "$PWD/local-install"
 ```
 
 ```cmake
-find_package(StrixLookahead 0.4.1 CONFIG REQUIRED COMPONENTS cache)
-target_link_libraries(my_application PRIVATE StrixLookahead::cache)
+find_package(LookaheadCache 0.4.2 CONFIG REQUIRED COMPONENTS cache)
+target_link_libraries(my_application PRIVATE LookaheadCache::cache)
 ```
 
 Al configurar la aplicación, añade el prefijo instalado a `CMAKE_PREFIX_PATH`.
-Una compilación con GPU también exporta `StrixLookahead::hip` o
-`StrixLookahead::cuda`. Se puede incorporar el código mediante `add_subdirectory`.
+Una compilación con GPU también exporta `LookaheadCache::hip` o
+`LookaheadCache::cuda`. Se puede incorporar el código mediante `add_subdirectory`.
 La [guía de integración](docs/integration.md) detalla ambas opciones y las
 responsabilidades sobre aritmética, vocabulario, invalidación, memoria, streams
 y comprobación de resultados.
+
+Por compatibilidad con el código existente, las cabeceras C siguen bajo
+`strix_lookahead/` y conservan el prefijo `sl_`.
+El antiguo nombre de paquete `StrixLookahead` sigue disponible como paquete de
+compatibilidad obsoleto; los nuevos consumidores deben usar `LookaheadCache`.
 
 La integración HIP en un motor externo está propuesta en la
 [PR #54](https://github.com/hyukudan/strix-halo-engine-lab/pull/54).
@@ -110,11 +123,13 @@ de recibos específicos; ni esa aplicación ni su adaptador vienen incluidos.
 ## Validación y alcance
 
 El [informe de validación](docs/validation.json) separa las pruebas host, la
-compilación y la ejecución nativa en dispositivos. En esta versión pasaron las
+compilación y la ejecución nativa en dispositivos. Los registros de la versión
+0.4.1 y anteriores usan el antiguo nombre StrixLookahead. En la validación
+registrada de 0.4.1 pasaron las
 siete pruebas CTest host, el ejemplo de pares y los consumidores del paquete.
 Se completó la compilación HIP para `gfx1151` y CUDA para las arquitecturas
 `86`, `89`, `120`. No se han ejecutado pruebas/benchmarks nativos de GPU ni
-modelos para esta versión.
+modelos para aquella versión.
 
 La equivalencia y el rendimiento con GPU/modelos deben validarse en el hardware
 y la aplicación concretos; aquí no se afirma una aceleración de modelos ni

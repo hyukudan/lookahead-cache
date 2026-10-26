@@ -1,13 +1,13 @@
-# StrixLookahead
+# LookaheadCache
 
-**A standalone library of reusable lookahead optimizations for LLM inference.**
+**A proposal-head cache for exact lookahead/speculative decoding.**
 
-[English](README.md) · [Español](README.es.md) · Version **0.4.1**
+[English](README.md) · [Español](README.es.md) · Version **0.4.2**
 
-StrixLookahead supplies a host cache, a rank-256 pair operator for CPU/HIP/CUDA,
+LookaheadCache supplies a host cache, a rank-256 pair operator for CPU/HIP/CUDA,
 an experimental CPU certified selector, and their tests and measurement tools.
-The main target is AMD Strix Halo; the CUDA backend provides a separate path for
-RTX integration. Applications link the library into their own inference engine.
+The first backend target is AMD Strix Halo (HIP, `gfx1151`), with other backends
+added alongside it. Applications link the library into their own inference engine.
 Model loading, execution, verification and sampling belong to that application.
 
 The central optimization reuses a predecessor-dependent FP32 bias vector when
@@ -19,6 +19,14 @@ collisions, vocabulary changes and the rest of the application.
 The [method note](docs/method.md) explains the reference papers, the implemented
 changes and the open research questions. [Recorded results](docs/results.md)
 describe the measurements and their limits.
+
+## Backends
+
+AMD Strix Halo (HIP, `gfx1151`) comes first. The library is modular so backends
+can be added alongside it. A CUDA backend is present and has been compiled for
+`86`, `89` and `120`; native runs remain pending. CUDA engine integration is in
+progress. The HIP engine adapter is the draft
+[PR #54](https://github.com/hyukudan/strix-halo-engine-lab/pull/54).
 
 ## Components
 
@@ -40,8 +48,8 @@ O(K) certificate alone is not an end-to-end speedup.
 Clone this repository with an account that has access:
 
 ```sh
-git clone git@github.com:hyukudan/strix-lookahead.git
-cd strix-lookahead
+git clone git@github.com:hyukudan/lookahead-cache.git
+cd lookahead-cache
 
 cmake -S . -B build-cpu -DCMAKE_BUILD_TYPE=Release
 cmake --build build-cpu --parallel
@@ -64,15 +72,19 @@ cmake --install build-cpu --prefix "$PWD/local-install"
 ```
 
 ```cmake
-find_package(StrixLookahead 0.4.1 CONFIG REQUIRED COMPONENTS cache)
-target_link_libraries(my_application PRIVATE StrixLookahead::cache)
+find_package(LookaheadCache 0.4.2 CONFIG REQUIRED COMPONENTS cache)
+target_link_libraries(my_application PRIVATE LookaheadCache::cache)
 ```
 
 Pass the installation prefix in `CMAKE_PREFIX_PATH` when configuring the
-application. Builds with GPU support also export `StrixLookahead::hip` or
-`StrixLookahead::cuda`. Source integration through `add_subdirectory` is supported.
+application. Builds with GPU support also export `LookaheadCache::hip` or
+`LookaheadCache::cuda`. Source integration through `add_subdirectory` is supported.
 The [integration guide](docs/integration.md) covers both CMake routes and the
 numerical, vocabulary, lifetime, stream and result-handling contracts.
+
+For source compatibility the C headers remain under `strix_lookahead/` and keep the `sl_` prefix.
+The old package name `StrixLookahead` still resolves as a deprecated compatibility
+package; new consumers should use `LookaheadCache`.
 
 An optional HIP engine adapter is proposed in
 [PR #54](https://github.com/hyukudan/strix-halo-engine-lab/pull/54).
@@ -105,10 +117,11 @@ application and its adapter are not part of this library.
 ## Validation and scope
 
 The [release validation record](docs/validation.json) distinguishes host checks,
-compilation and native device execution. For this release, the seven host CTests,
+compilation and native device execution. Records for 0.4.1 and earlier use the
+former name StrixLookahead. In the recorded 0.4.1 validation, the seven host CTests,
 the pair example and package consumers passed. HIP compilation for `gfx1151` and
 CUDA compilation for architectures `86`, `89`, `120` completed. Native GPU
-tests/benchmarks and model runs have not been performed for this release.
+tests/benchmarks and model runs have not been performed for that release.
 
 GPU/model equivalence and performance must be established on the intended
 hardware and application; no model speedup or superiority over another system

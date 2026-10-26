@@ -4,6 +4,7 @@ The [release validation record](validation.json) records which checks actually
 ran. A successful build, an unavailable native test, a synthetic benchmark and
 a real-model measurement establish different things. This repository's default
 benchmarks measure the pair component with synthetic inputs.
+Records for 0.4.1 and earlier use the former name StrixLookahead.
 
 [Results](results.md) collects the actual measurements and their scope;
 [method](method.md) documents the source paper and the reasoning behind the

@@ -1,5 +1,7 @@
 # Measured CPU component results
 
+Records for 0.4.1 and earlier use the former name StrixLookahead.
+
 Date: **2026-10-26**. These measurements show how predecessor reuse affects the
 standalone **CPU rank-256 pair operator**. The comparison uses the same
 implementation and inputs with cache capacity zero as its reference. It does

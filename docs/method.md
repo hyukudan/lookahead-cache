@@ -1,6 +1,6 @@
 # Método: reutilización exacta del sesgo de transición
 
-StrixLookahead estudia e implementa optimizaciones del cálculo de propuestas
+LookaheadCache estudia e implementa optimizaciones del cálculo de propuestas
 para inferencia especulativa. Este repositorio reúne el método, el código
 reutilizable, las pruebas y nuestros datos. La ejecución del modelo y la
 integración en un producto pertenecen al software que use la biblioteca.
@@ -26,7 +26,7 @@ las referencias primarias revisadas, con sus versiones fijadas:
 El [enlace inicial proporcionado](https://x.com/roy_eisenstadt/status/2114414151519121441)
 y las [referencias BibTeX](../references.bib) permiten seguir la investigación.
 Los enlaces a los manuscritos conservan la atribución de las ideas originales.
-Las cifras publicadas por sus autores no son mediciones de StrixLookahead.
+Las cifras publicadas por sus autores no son mediciones de LookaheadCache.
 
 **La implementación actual optimiza el operador Markov estático de rango 256.**
 No implementa el corrector contextual completo de DCOCO, su entrenamiento ni un
