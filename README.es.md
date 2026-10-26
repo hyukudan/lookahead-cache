@@ -79,6 +79,12 @@ La [guía de integración](docs/integration.md) detalla ambas opciones y las
 responsabilidades sobre aritmética, vocabulario, invalidación, memoria, streams
 y comprobación de resultados.
 
+La integración HIP en un motor externo está propuesta en la
+[PR #54](https://github.com/hyukudan/strix-halo-engine-lab/pull/54).
+La [sección del adaptador externo](docs/integration.md#external-reference-adapter)
+enlaza su guía de instalación y cualificación. Este repositorio conserva el método,
+la biblioteca y los datos del componente como proyecto independiente del motor.
+
 ## Medir el componente
 
 Tras compilar para CPU:

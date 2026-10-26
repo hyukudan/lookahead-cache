@@ -5,6 +5,21 @@ owns model loading, tensor layout conversion, contextual logits, draft policy,
 target verification, attention/KV state, rollback and sampling. Integration is
 specific to the application's numerical and execution contracts.
 
+## External reference adapter
+
+An optional HIP engine integration is tracked separately in
+[engine PR #54](https://github.com/hyukudan/strix-halo-engine-lab/pull/54).
+It links an installed StrixLookahead package and keeps the engine source and
+model assets in that engine's project. The
+[adapter guide at the reviewed revision](https://github.com/hyukudan/strix-halo-engine-lab/blob/e3dd04342d6101ce03075218757c3d4c8f1150e7/docs/models/deepseek-v4.1/hip-lookahead.md)
+describes the build opt-in, original/uncached/cached runtime modes, memory
+admission, native checks and qualification commands.
+
+That proposal was compiled against library revision
+`d44244e098c72fb22a09c06c05a54de023037d73` (0.4.1). Its host checks and HIP build
+do not establish native GPU or complete-model correctness/performance. Use it as
+a concrete integration reference, then qualify the intended hardware and workload.
+
 ## CMake integration
 
 For an installed package:

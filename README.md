@@ -74,6 +74,12 @@ application. Builds with GPU support also export `StrixLookahead::hip` or
 The [integration guide](docs/integration.md) covers both CMake routes and the
 numerical, vocabulary, lifetime, stream and result-handling contracts.
 
+An optional HIP engine adapter is proposed in
+[PR #54](https://github.com/hyukudan/strix-halo-engine-lab/pull/54).
+The [external adapter section](docs/integration.md#external-reference-adapter)
+links its installation and qualification guide; this repository keeps the method,
+library and component evidence independent of that engine.
+
 ## Measure the component
 
 After building the CPU target:

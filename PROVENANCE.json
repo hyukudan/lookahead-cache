@@ -49,5 +49,15 @@
   ],
   "method_documentation": "docs/method.md",
   "local_results_documentation": "docs/results.md",
-  "bibliography": "references.bib"
+  "bibliography": "references.bib",
+  "external_integrations": [
+    {
+      "repository": "https://github.com/hyukudan/strix-halo-engine-lab",
+      "pull_request": "https://github.com/hyukudan/strix-halo-engine-lab/pull/54",
+      "reviewed_commit": "e3dd04342d6101ce03075218757c3d4c8f1150e7",
+      "library_revision_used": "d44244e098c72fb22a09c06c05a54de023037d73",
+      "engine_source_included_here": false,
+      "backend": "HIP"
+    }
+  ]
 }
