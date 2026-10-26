@@ -1,6 +1,49 @@
 # Validation
 
-## Recorded evidence, version 0.2.1, 2026-10-26
+## Integration evidence, version 0.3.0, 2026-10-26
+
+Version 0.3.0 adds the private HIP engine adapter, its reversible pinned patch,
+the native model-test gate, the three-variant campaign and trace replay. The
+numerical library implementation is unchanged from 0.2.1. The full build record
+is [engine-integration-build-2026-10-26.json](../benchmarks/results/engine-integration-build-2026-10-26.json).
+
+| Gate | Result |
+| --- | --- |
+| Release host library and C ABI | Built with GCC/G++ 13.3.0 |
+| Host CTest suite | Eight targets passed: the four native host contracts and four Python tool contracts |
+| Campaign collector | Eleven test groups passed using explicitly synthetic executables; these are not model runs |
+| Trace replay | Six test groups passed, including context/epoch changes and inconsistent hit flags |
+| Patch installer | Six test groups passed; the final five-file patch also applied and reversed on the exact engine base, leaving it clean |
+| HIP adapter enabled/disabled | Both translation-unit modes compiled for `gfx1151` with strict floating-point flags and warnings as errors |
+| Engine application and native test | Batch application, HIP model-test executable and host drafter-test executable compiled and linked |
+| Engine host drafter tests | Passed, including simulation, driver and controller contracts |
+| Native HIP attempt | Initialization stopped at `hipMalloc: no ROCm-capable device is detected`, exit 2; no GPU/model qualification passed |
+| Model campaign, Strix Halo throughput, CUDA engine adapter, two-node performance | Not run / not established |
+
+The engine patch is bound to commit
+`683e69e91eb2203addf016e2cfdead8217e65fa2`. The build uses the supported 0.2.1
+installed HIP package ABI; the 0.3.0 numerical library has identical source.
+The private package and engine source hashes are recorded without claiming a
+source-to-binary attestation. No changes were published to the public engine.
+
+The collector requires a successful real-weight native fixture receipt before
+running any comparison. That fixture compares proposal tokens, confidence,
+Markov embeddings, base logits and stage outputs bitwise on its cases. It also
+checks deterministic cold/warm reuse, reordered or enlarged vocabularies, reset
+and context recreation. Its hidden-state inputs are synthetic; this does not
+replace the subsequent real-prompt target/state gate.
+
+The three engine variants use the same executable and files. Exact generated IDs
+and kept-row/final-state digests must agree before timing; FNV64 digests are not
+collision-free numerical proofs. Timing excludes detailed traces and model load,
+but includes vocabulary growth during decode. The guide documents the separate
+setup counters and the truncated-layer diagnostic label.
+
+Follow the [engine integration procedure](engine-integration.md) on the physical
+device. Native tests which were skipped, receipts which are missing, or an adapter
+which performs no proposal work cannot qualify a speed measurement.
+
+## Previous component evidence, version 0.2.1, 2026-10-26
 
 | Gate | Result |
 | --- | --- |

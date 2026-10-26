@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(StrixLookahead VERSION 0.2.1 LANGUAGES C CXX)
+project(StrixLookahead VERSION 0.3.0 LANGUAGES C CXX)
 
 include(GNUInstallDirs)
 option(SL_ENABLE_HIP "Build the Strix Halo HIP backend" OFF)
@@ -70,6 +70,15 @@ if(BUILD_TESTING)
     if(Python3_Interpreter_FOUND)
         add_test(NAME evidence_tools_contract
             COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/evidence_tools_test.py)
+        add_test(NAME engine_qualification_contract
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/engine_qualification_test.py)
+        add_test(NAME predecessor_trace_contract
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/predecessor_trace_test.py)
+        find_package(Git QUIET)
+        if(Git_FOUND)
+            add_test(NAME engine_patch_contract
+                COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/engine_patch_test.py)
+        endif()
     endif()
 endif()
 

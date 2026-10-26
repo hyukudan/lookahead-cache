@@ -10,13 +10,15 @@ certificate and a full-selection fallback.
 HIP and CUDA pair implementations compile. Both use a two-kernel step, device
 cache lookup, coalesced hit reads, explicit publication and a capacity-zero
 comparison mode. They are experimental until executed and qualified on physical
-GPUs. The actual inference-engine adapter is not wired yet. Recorded evidence
-belongs in [validation](validation.md).
+GPUs. Version 0.3 adds a private pinned HIP engine adapter and a three-variant
+qualification runner. Native model execution is still pending; see the
+[engine integration guide](engine-integration.md). Earlier component evidence is
+recorded in [validation](validation.md).
 
 The [0.2.1 review](review-0.2.1.md) closes an independent-SSE-rounding bug, removes
 unnecessary CPU arithmetic, reduces GPU winner-reduction resources and validates
 benchmark evidence and installed consumers. None of these changes closes the
-physical-device or engine-integration milestones below.
+physical-device or model-equivalence milestones below.
 
 ## First native milestone: Strix Halo
 
@@ -25,16 +27,19 @@ scores/tokens and confidence embeddings. Exercise hits, misses, direct-map
 collisions, reduced/reordered vocabularies, invalid predecessors, reset, asynchronous
 errors and graph replay. Measure both cold and reused workloads.
 
-Wire an opt-in DeepSeek proposal adapter at the existing head-selection boundary.
-Preserve verification and rollback. Keep a capacity-zero mode and the existing
-engine path available for comparison. Measure whole-cycle latency, acceptance,
+Run the implemented opt-in adapter at the existing head-selection boundary.
+Its first campaign compares the original head, capacity zero and caching in one
+HIP binary, with fixed windows, exact output IDs and the engine's native
+row/state gates. Extend qualification to controller behavior and two-node
+execution separately. Measure whole-cycle latency, acceptance,
 request-tail latency, memory footprint and token throughput, with the same model
 identity and workload. Host component ratios do not establish any of these gains.
 
 ## Mapping-aware reuse, after trace evidence
 
-Record how often predecessors recur and how often candidate mappings grow or
-change. The current fixed-mapping API requires a new instance after growth; its
+Collect the implemented context/epoch/hit traces to measure how often predecessors
+recur and how often candidate mappings grow or change. The current fixed-mapping
+API requires a new instance after growth; its
 real hit rate must include that cost. Preserve per-request context ownership and
 distinguish request placement from vocabulary sharding.
 

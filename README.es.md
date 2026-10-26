@@ -5,9 +5,10 @@ para Strix Halo y con backend CUDA independiente.**
 
 [English and build commands](README.md)
 
-La versión 0.2.1 implementa una cabeza de transiciones de rango 256, una caché de sus
-vectores FP32 y un selector experimental con certificado matemático. El motor
-conserva la verificación, el estado del modelo y la corrección del muestreo.
+La versión 0.3.0 conecta la cabeza de transiciones de rango 256 y su caché al motor
+HIP mediante un parche privado y reversible. Añade una campaña que compara la
+ruta original, la biblioteca sin caché y la biblioteca con caché. El motor conserva
+la verificación, el estado del modelo y la corrección del muestreo.
 
 ## Qué contiene
 
@@ -18,7 +19,8 @@ conserva la verificación, el estado del modelo y la corrección del muestreo.
 | Backend HIP para `gfx1151` | Código compilado; ejecución en Strix pendiente |
 | Backend CUDA para RTX | Código compilado; ejecución en GPU pendiente |
 | Selector de candidatos con certificado y búsqueda completa de respaldo | Referencia CPU con pruebas exhaustivas y aleatorias |
-| Integración con el motor y comparación de generación completa | Contrato documentado; conexión y medición pendientes |
+| Adaptador privado para el motor HIP | Implementado; ejecutable y pruebas nativas compilados para `gfx1151` |
+| Campaña de generación completa | Automatizada; ejecución con GPU y pesos reales pendiente |
 
 Los dos backends mantienen dos kernels por paso. En un acierto leen el sesgo
 almacenado y calculan el ganador; en un fallo reproducen la operación original y
@@ -28,6 +30,34 @@ del host dentro del encolado de un paso.
 Cada instancia fija los pesos y el vocabulario ordenado, y pertenece a un único
 stream. El crecimiento o cambio de ese vocabulario requiere sustituir la
 instancia. La capacidad cero permite comparar la misma operación sin caché.
+
+## Integración privada en 0.3.0
+
+El adaptador asigna una caché independiente a cada solicitud y encadena los cinco
+tokens propuestos dentro de la GPU. Conserva dos kernels por paso y fusiona la
+publicación de resultados con el cálculo de confianza. Los estados y contadores
+regresan junto a la transferencia que el motor ya realizaba.
+
+La reserva de memoria incluye la caché de cada contexto. Un cambio real del
+vocabulario reconstruye su binding e invalida las entradas anteriores; cambiar de
+solicitud conserva su caché. La traza permite comprobar los aciertos registrados y
+simular otras capacidades sin deducir una velocidad a partir del hit rate.
+
+La campaña exige primero una prueba nativa de propuestas, confianza, embeddings
+y logits con los pesos reales. Después comprueba los tokens finales, los hashes
+de las filas conservadas y el estado final frente al motor original. Solo entonces
+ejecuta las pasadas de tiempo, con trazas desactivadas y orden rotativo.
+
+La primera ruta está acotada a un dispositivo HIP, generación greedy, ventanas
+fijas y concurrencias 1, 2 y 4. El adaptador CUDA, los dos nodos y el controlador
+adaptativo requieren integración o validación adicional. El código compilado y las
+pruebas CPU no demuestran todavía una mejora de velocidad en los Strix físicos.
+
+El motor de origen es público. El parche se conserva en este repositorio privado
+y está fijado a un commit y a las huellas de sus cinco archivos. El instalador no
+crea commits ni hace push. La [guía de integración](docs/engine-integration.md)
+contiene los comandos para compilar, aplicar o revertir el parche y ejecutar la
+campaña completa.
 
 ## Mejoras de la revisión 0.2.1
 

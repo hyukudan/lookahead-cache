@@ -2,15 +2,17 @@
 
 ## Status and engine boundary
 
-The pair components are implemented independently; the inference-engine adapter
-is not wired yet. The integration inspection used
-[EngineLab checkpoint `81f708e`](https://github.com/hyukudan/strix-halo-engine-lab/tree/81f708e994f423931f6a4658b1de5ea21affe076).
-It identified a DeepSeek proposal head with global FP16 pair matrices, rank 256,
-ordered candidate IDs, separate core/extra base-logit arrays and a confidence head
-that consumes the predecessor embedding.
+Version 0.3 implements a private HIP adapter against engine commit
+`683e69e91eb2203addf016e2cfdead8217e65fa2`. The [engine integration guide](engine-integration.md)
+covers its pinned patch, build options and three-variant qualification runner.
+Physical-device and real-model qualification remain pending. The contracts below
+also apply when embedding the standalone library in another caller.
 
-The adapter must preserve the engine's arithmetic, global-ID tie-breaking,
-confidence inputs, target verification and state rollback. It must compare against
+The adapter connects a DeepSeek proposal head with global FP16 pair matrices,
+rank 256, ordered candidate IDs, separate core/extra base-logit arrays and a
+confidence head consuming the predecessor embedding. It preserves the engine's
+declared arithmetic, global-ID tie-breaking and confidence inputs. The engine
+retains target verification and state rollback. Qualification compares against
 the existing fused selector as well as the new operator with caching disabled.
 The standalone host benchmark compares the same CPU reference with capacity zero;
 it is not a measurement of that engine.
@@ -93,9 +95,10 @@ drafter. Core logits use persistent scratch storage. Extra IDs and logits belong
 to request contexts; their buffers can be swapped or grown. An adapter must follow
 those lifetimes rather than retaining an address after replacement.
 
-No empirical predecessor-reuse or vocabulary-growth frequency was found in the
-inspected timing/acceptance statistics. Before enabling caching by default, record
-predecessors, context identity, mapping changes, hits/misses and whole-cycle times.
+The private adapter adds predecessor/context/epoch traces, actual hit/miss counts
+and resident payload receipts. No native workload trace or cache speed result has
+yet been collected here. Before enabling caching by default, record predecessors,
+context identity, mapping changes, hits/misses and whole-cycle times.
 Include invalidation costs in the comparison. An append-only extension design is
 a possible later improvement, not a current capability.
 
@@ -114,7 +117,9 @@ asynchronous device-readiness contract.
 
 HIP/CUDA compilation is recorded separately from physical GPU qualification.
 Native model execution, graph replay, failure handling and end-to-end performance
-remain required integration gates.
+remain required integration gates. The first engine campaign isolates a single
+HIP node with greedy decoding and fixed windows; it does not qualify adaptive
+controller policies or two-node execution.
 
 ## Installed CMake consumer
 

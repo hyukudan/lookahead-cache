@@ -1,0 +1,903 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index dcf702f6ebcd8ddce9f2445ece334557ee29c750..84b71d592a0a499bd001d3d2b74f77885d68fb22 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -18,6 +18,11 @@ endif()
+ option(STRIX_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" ON)
+ option(STRIX_ENABLE_HIP_RUNTIME "Build optional HIP allocation/runtime support" OFF)
+ option(STRIX_FAMILY_DEEPSEEK41 "Build the deepseek41 model family module" ON)
++# Private integration patch: optional fixed-vocabulary proposal cache.
++option(STRIX_ENABLE_LOOKAHEAD "Link an installed private StrixLookahead HIP package" OFF)
++if(STRIX_ENABLE_LOOKAHEAD AND (NOT STRIX_ENABLE_HIP_RUNTIME OR NOT STRIX_FAMILY_DEEPSEEK41))
++    message(FATAL_ERROR "STRIX_ENABLE_LOOKAHEAD requires HIP runtime and the deepseek41 family")
++endif()
+ option(STRIX_ENABLE_CUDA_DS41 "Build the deepseek41 CUDA backend (sm_120 / sm_89 / sm_86) and its tests" OFF)
+ option(STRIX_ENABLE_CUDA_TRELLIS "Build experimental compressed-weight CUDA linear kernels and probes" OFF)
+ option(STRIX_DS41_TAP_CAPTURE "Build the host-forward capture tool of the deepseek41 CUDA checks (host only)" OFF)
+@@ -3155,6 +3160,14 @@ strix_target_warnings(strix-deepseek41-dspark)
+ if(STRIX_ENABLE_HIP_RUNTIME)
+     add_library(strix_ds41_dspark_hip STATIC src/hip_ds41_dspark.hip)
+     target_link_libraries(strix_ds41_dspark_hip PUBLIC strix_ds41_dspark strix_ds41_hip)
++    if(STRIX_ENABLE_LOOKAHEAD)
++        find_package(StrixLookahead 0.2.1 CONFIG REQUIRED)
++        if(NOT TARGET StrixLookahead::hip)
++            message(FATAL_ERROR "Install StrixLookahead with SL_ENABLE_HIP=ON first")
++        endif()
++        target_link_libraries(strix_ds41_dspark_hip PRIVATE StrixLookahead::hip)
++        target_compile_definitions(strix_ds41_dspark_hip PRIVATE STRIX_ENABLE_LOOKAHEAD=1)
++    endif()
+     set(strix_ds41_dspark_hip_targets strix_ds41_dspark_hip)
+     if(BUILD_TESTING)
+         add_executable(strix-hip-ds41-dspark-tests tests/hip_ds41_dspark_tests.hip)
+diff --git a/apps/deepseek41_batch_main.cpp b/apps/deepseek41_batch_main.cpp
+index e74a9225afe7ce274bfbceec617b0a64c776109a..8ca3efd95f8347e5d2e0b461fad209eba2321aff 100644
+--- a/apps/deepseek41_batch_main.cpp
++++ b/apps/deepseek41_batch_main.cpp
+@@ -9,6 +9,7 @@
+ #include <algorithm>
+ #include <chrono>
+ #include <cstdio>
++#include <cstdlib>
+ #include <cstring>
+ #include <fstream>
+ #include <iostream>
+@@ -17,6 +18,7 @@
+ #include <sstream>
+ #include <stdexcept>
+ #include <string>
++#include <string_view>
+ #include <thread>
+ #include <vector>
+ 
+@@ -142,6 +144,40 @@ struct RowRecord {
+ };
+ using Trace = std::map<std::uint32_t, RowRecord>;  // by position, per request
+ 
++// Private integration patch: opt-in machine-readable qualification receipts.
++// Preserve strings as JSON even when a caller supplies a path or vocabulary
++// label containing control characters. No receipt output occurs inside timing.
++void lookahead_json_string(std::string_view value) {
++    std::putchar('"');
++    for (const char raw : value) {
++        const auto c = static_cast<unsigned char>(raw);
++        if (c == '"' || c == '\\') std::printf("\\%c", static_cast<int>(c));
++        else if (c < 0x20U) std::printf("\\u%04x", static_cast<unsigned>(c));
++        else std::putchar(static_cast<int>(c));
++    }
++    std::putchar('"');
++}
++
++void lookahead_json_ids(std::span<const std::uint32_t> ids) {
++    std::putchar('[');
++    for (std::size_t i = 0; i < ids.size(); ++i) std::printf("%s%u", i ? "," : "", ids[i]);
++    std::putchar(']');
++}
++
++std::uint64_t lookahead_trace_digest(const Trace& trace) {
++    std::uint64_t hash = 14695981039346656037ULL;
++    const auto word = [&](std::uint64_t value, unsigned bytes) {
++        for (unsigned i = 0; i < bytes; ++i, value >>= 8U) hash = (hash ^ (value & 0xffU)) * 1099511628211ULL;
++    };
++    for (const auto& [position, row] : trace) {
++        word(position, 4U);
++        word(row.fed, 4U);
++        word(row.argmax, 4U);
++        word(row.hash, 8U);
++    }
++    return hash;
++}
++
+ struct RunResult {
+     std::vector<Trace> traces;
+     std::vector<std::uint64_t> state_hashes;
+@@ -501,6 +537,7 @@ bool spec_gate(BatchForward& fwd, strix::ds41::dspark::DeviceDrafter* drafter, c
+         }
+         return a.spec_only || check.report(fwd, a, n, alone, alone_state);
+     }
++    const auto lookahead_before = drafter->lookahead_stats();
+     strix::deepseek41::BatchSpecOptions so;
+     so.vocabulary = a.vocab;
+     so.prompt_rows = a.prompt_rows;
+@@ -592,9 +629,12 @@ bool spec_gate(BatchForward& fwd, strix::ds41::dspark::DeviceDrafter* drafter, c
+             }
+         }
+     std::uint64_t states = 0;  // each request's final attention state (this rank's) against its run alone
++    std::vector<std::uint64_t> state_hashes;
+     if (!a.spec_only && a.check)
+-        for (std::uint32_t i = 0; i < n; ++i)
+-            if (fwd.export_state(i).digest(true) != alone_state[i]) ++states;
++        for (std::uint32_t i = 0; i < n; ++i) {
++            state_hashes.push_back(fwd.export_state(i).digest(true));
++            if (state_hashes.back() != alone_state[i]) ++states;
++        }
+     if (print) {
+         const auto& st = spec.stats();
+         const double agg = st.decode_seconds > 0.0 ? static_cast<double>(st.decode_tokens) / st.decode_seconds : 0.0;
+@@ -621,6 +661,60 @@ bool spec_gate(BatchForward& fwd, strix::ds41::dspark::DeviceDrafter* drafter, c
+                         differ == 0U && states == 0U ? "PASS" : "FAIL", static_cast<unsigned long long>(compared),
+                         a.check ? (a.gather ? "tokens + full logits" : "tokens + this rank's logits slice") : "tokens",
+                         static_cast<unsigned long long>(differ), !a.check ? "not compared (no --check)" : states == 0U ? "== alone" : "DIFFER");
++        const char* receipt = std::getenv("STRIX_LOOKAHEAD_RECEIPT");
++        if (receipt && std::strcmp(receipt, "1") == 0) {
++            const auto after = drafter->lookahead_stats();
++            const auto delta = [](std::uint64_t end, std::uint64_t start) {
++                if (end < start) throw std::runtime_error("lookahead statistics regressed during a request");
++                return static_cast<unsigned long long>(end - start);
++            };
++            std::printf("STRIX_LOOKAHEAD_RUN {\"schema_version\":1,\"backend\":\"hip\",\"transport\":");
++            lookahead_json_string(a.transport);
++            std::printf(",\"world\":%u,\"mode\":\"spec\",\"sampler\":\"greedy\",\"layers\":%u,"
++                        "\"max_positions\":%u,\"vocabulary\":", two_ranks ? 2U : 1U, a.layers, a.max_positions);
++            lookahead_json_string(a.vocab);
++            std::printf(",\"window\":");
++            lookahead_json_string(a.window);
++            std::printf(",\"generate\":%u,\"concurrency\":%u,\"sync_start\":%s,\"prompt_rows\":%u,\"prompts\":[",
++                        a.generate, n, a.sync_start ? "true" : "false", a.prompt_rows);
++            for (std::uint32_t i = 0; i < n; ++i) {
++                if (i) std::putchar(',');
++                lookahead_json_ids(prompts[i]);
++            }
++            std::printf("],\"tokens\":[");
++            for (std::uint32_t i = 0; i < n; ++i) {
++                if (i) std::putchar(',');
++                lookahead_json_ids(seqs[i].generated);
++            }
++            std::printf("],\"decode_tokens\":%llu,\"decode_seconds\":%.17g,\"wall_decode_seconds\":%.17g,"
++                        "\"request_seconds\":%.17g,\"gate\":{\"enabled\":%s,\"check\":%s,\"gather\":%s,"
++                        "\"passed\":%s,\"compared_rows\":%llu,\"differing_rows\":%llu,\"differing_states\":%llu},"
++                        "\"kept_rows_fnv64\":[",
++                        static_cast<unsigned long long>(st.decode_tokens), st.decode_seconds, wall_decode, wall,
++                        a.spec_only ? "false" : "true", a.check ? "true" : "false", a.gather ? "true" : "false",
++                        a.spec_only ? "null" : differ == 0U && states == 0U ? "true" : "false",
++                        static_cast<unsigned long long>(compared), static_cast<unsigned long long>(differ),
++                        static_cast<unsigned long long>(states));
++            for (std::uint32_t i = 0; i < n; ++i)
++                std::printf("%s\"%016llx\"", i ? "," : "", static_cast<unsigned long long>(lookahead_trace_digest(traces[i])));
++            std::printf("],\"state_fnv64\":");
++            if (state_hashes.empty()) std::printf("null");
++            else {
++                std::putchar('[');
++                for (std::size_t i = 0; i < state_hashes.size(); ++i)
++                    std::printf("%s\"%016llx\"", i ? "," : "", static_cast<unsigned long long>(state_hashes[i]));
++                std::putchar(']');
++            }
++            std::printf(",\"adapter\":{\"compiled\":%s,\"requested\":%s,\"active\":%s,\"capacity\":%u,"
++                        "\"vocabulary_size\":%u,\"payload_bytes\":%llu,\"steps\":%llu,\"hits\":%llu,\"misses\":%llu,\"map_rebuilds\":%llu,"
++                        "\"fallback_windows\":%llu,\"errors\":%llu}}\n",
++                        after.compiled ? "true" : "false", after.requested ? "true" : "false", after.active ? "true" : "false",
++                        after.capacity, after.vocabulary_size, static_cast<unsigned long long>(after.payload_bytes),
++                        delta(after.steps, lookahead_before.steps),
++                        delta(after.hits, lookahead_before.hits), delta(after.misses, lookahead_before.misses),
++                        delta(after.map_rebuilds, lookahead_before.map_rebuilds),
++                        delta(after.fallback_windows, lookahead_before.fallback_windows), delta(after.errors, lookahead_before.errors));
++        }
+         std::fflush(stdout);
+     }
+     return differ == 0U && states == 0U;
+diff --git a/include/strix/hip_ds41_dspark.hpp b/include/strix/hip_ds41_dspark.hpp
+index 1b49cbab5f3d812f4c8ab4e8d34f4fdb1e13b275..83f2b4393f8d25958219dec1612758990a8a7067 100644
+--- a/include/strix/hip_ds41_dspark.hpp
++++ b/include/strix/hip_ds41_dspark.hpp
+@@ -1,5 +1,7 @@
+ #pragma once
+ 
++// Modified for private StrixLookahead integration, 2026-10-26.
++
+ // Device side of the DSpark drafter (gfx1151, wave32): the kernels of ds41_dspark.hpp's declared
+ // operations and a resident drafter that runs a draft step. Every result equals the host reference
+ // bitwise (tests/hip_ds41_dspark_tests.hip).
+@@ -58,6 +60,18 @@ struct DraftTimes {
+     double head_ms = 0.0;
+ };
+ 
++// Opt-in head cache telemetry, aggregated over this drafter's sequence contexts.
++// The cache changes proposal-head work only; target verification and rollback
++// remain owned by the original driver. `active` describes the selected context.
++struct LookaheadStats {
++    bool compiled = false, requested = false, active = false;
++    // Snapshot capacity is zero when disabled; configuration defaults to 16.
++    std::uint32_t capacity = 16, vocabulary_size = 0;
++    std::uint64_t payload_bytes = 0;
++    std::uint64_t steps = 0, hits = 0, misses = 0, map_rebuilds = 0;
++    std::uint64_t fallback_windows = 0, errors = 0;
++};
++
+ class DeviceDrafter {
+ public:
+     // Uploads every tensor the drafter reads (draft stages, the target's token embedding and output head).
+@@ -88,6 +102,16 @@ public:
+     // id; 8 bytes) through `exchange`; both ranks take the better (larger value, lower id), so the tokens
+     // equal the one-rank draft. Everything else of the drafter is replicated (same inputs, same bits).
+     void set_rank(std::uint32_t rank, std::uint32_t world, RankExchange exchange);
++    // Explicit binding outside graph capture, on the drafter's owning device.
++    // Disabled by default. STRIX_LOOKAHEAD_CAPACITY=N requests the same binding
++    // at construction: N=0 compares the uncached library, N>0 enables caching.
++    // Each sequence owns an immutable vocabulary binding; vocabulary mutations
++    // rebuild it before the next head call. Vocabulary-sharded world=2 uses the
++    // original head and records fallback_windows. Allocation/runtime errors throw.
++    // The payload budget applies to each context and excludes small metadata.
++    void configure_lookahead(bool enabled, std::uint32_t capacity = 16,
++                             std::uint64_t payload_budget_bytes = 64ULL * 1024U * 1024U);
++    [[nodiscard]] LookaheadStats lookahead_stats() const noexcept;
+     // Forgets every appended row (new sequence).
+     void reset();
+     // An empty context continues a sequence at `position` whose earlier rows it never saw (e.g. a prompt read by the
+@@ -106,11 +130,16 @@ public:
+ 
+     // Device bytes a drafter over `weights` with `sequences` contexts allocates (no device needed: the sizes of the
+     // constructor's uploads, its scratch and set_sequences' contexts; hipMalloc rounding not included).
++    // With STRIX_LOOKAHEAD_CAPACITY set, includes a conservative full-vocabulary
++    // cache/mapping/workspace reservation for every context, before allocation.
++    // A manual configure_lookahead call must reserve lookahead_footprint first.
+     struct Footprint {
+-        std::uint64_t weights = 0, scratch = 0, contexts = 0;
+-        [[nodiscard]] std::uint64_t total() const noexcept { return weights + scratch + contexts; }
++        std::uint64_t weights = 0, scratch = 0, contexts = 0, lookahead = 0;
++        [[nodiscard]] std::uint64_t total() const noexcept { return weights + scratch + contexts + lookahead; }
+     };
+     [[nodiscard]] static Footprint footprint(const Weights& weights, std::uint32_t sequences);
++    [[nodiscard]] static std::uint64_t lookahead_footprint(std::uint32_t capacity, std::uint32_t sequences,
++        std::uint64_t payload_budget_bytes = 64ULL * 1024U * 1024U);
+ 
+ private:
+     struct Impl;
+diff --git a/src/hip_ds41_dspark.hip b/src/hip_ds41_dspark.hip
+index 5df942587c34a5bdcd203ec4af4cc7248b6d2b95..631265422422d41e4eb5cdab77baabf8058a3e92 100644
+--- a/src/hip_ds41_dspark.hip
++++ b/src/hip_ds41_dspark.hip
+@@ -1,3 +1,4 @@
++// Modified for private StrixLookahead integration, 2026-10-26.
+ #pragma clang fp contract(off)
+ #include "strix/hip_ds41_dspark.hpp"
+ 
+@@ -5,14 +6,21 @@
+ #include <hip/hip_runtime.h>
+ 
+ #include "strix/hip_ds41_formats.hpp"
++#if defined(STRIX_ENABLE_LOOKAHEAD)
++#include "strix_lookahead/device.h"
++#endif
+ 
+ #include <algorithm>
++#include <charconv>
++#include <cerrno>
+ #include <cstdio>
+ #include <filesystem>
+ #include <fstream>
+ #include <chrono>
+ #include <cstdlib>
+ #include <cstring>
++#include <limits>
++#include <optional>
+ #include <stdexcept>
+ #include <string>
+ 
+@@ -24,6 +32,29 @@ void check(hipError_t status, const char* what) {
+ }
+ hipStream_t as_stream(void* stream) { return static_cast<hipStream_t>(stream); }
+ 
++#if defined(STRIX_ENABLE_LOOKAHEAD)
++static_assert(markov_rank == SL_PAIR_RANK);
++constexpr std::uint32_t lookahead_status_offset = block_size + 1U;
++constexpr std::uint32_t lookahead_hit_offset = lookahead_status_offset + block_size;
++constexpr std::uint32_t lookahead_token_slots = lookahead_hit_offset + block_size;
++#endif
++
++void bump(std::uint64_t& value, std::uint64_t amount = 1U) {
++    const auto limit = std::numeric_limits<std::uint64_t>::max();
++    value = amount > limit - value ? limit : value + amount;
++}
++
++std::optional<std::uint32_t> environment_lookahead_capacity() {
++    const auto* value = std::getenv("STRIX_LOOKAHEAD_CAPACITY");
++    if (!value) return std::nullopt;
++    std::uint32_t capacity = 0;
++    const auto* end = value + std::strlen(value);
++    const auto parsed = std::from_chars(value, end, capacity);
++    if (value == end || parsed.ec != std::errc{} || parsed.ptr != end)
++        throw std::invalid_argument("strix-lookahead: STRIX_LOOKAHEAD_CAPACITY must be an unsigned decimal integer");
++    return capacity;
++}
++
+ __device__ __forceinline__ float f16_device(std::uint16_t bits) { return __half2float(__ushort_as_half(bits)); }
+ // Wave-order reduction: every lane holds its ascending partial sum; butterfly d = 16..1.
+ __device__ __forceinline__ float butterfly(float v) {
+@@ -237,6 +268,33 @@ __global__ __launch_bounds__(32) void confidence_kernel(const float* weight, con
+     if (lane == 0U) out[r] = acc;
+ }
+ 
++#if defined(STRIX_ENABLE_LOOKAHEAD)
++// Publish the private head's tokens and telemetry in the existing confidence
++// launch. The normal confidence arithmetic is identical to confidence_kernel.
++// A failed row never reads a stale predecessor embedding, and is rejected on
++// the host before any Draft is returned to target verification.
++__global__ __launch_bounds__(32) void lookahead_confidence_kernel(const float* weight, const float* x,
++    const float* markov, const sl_device_result* results, std::uint32_t* tokens, float* out) {
++    const unsigned lane = threadIdx.x, r = blockIdx.x;
++    const auto result = results[r];
++    if (lane == 0U) {
++        tokens[r + 1U] = result.status == SL_OK ? result.selection.token : vocab;
++        tokens[lookahead_status_offset + r] = result.status;
++        tokens[lookahead_hit_offset + r] = result.selection.cache_hit;
++    }
++    if (result.status != SL_OK) {
++        if (lane == 0U) out[r] = __builtin_nanf("");
++        return;
++    }
++    const float* xr = x + static_cast<std::size_t>(r) * hidden;
++    const float* er = markov + static_cast<std::size_t>(r) * markov_rank;
++    float acc = 0.0F;
++    for (unsigned j = lane; j < confidence_width; j += 32U) acc = acc + weight[j] * (j < hidden ? xr[j] : er[j - hidden]);
++    acc = butterfly(acc);
++    if (lane == 0U) out[r] = acc;
++}
++#endif
++
+ // ---- router of the draft rows (reference_router of ds41_moe.hpp): one wave per (expert, row) for
+ // the scores, then one block per row for the top-k ----
+ __global__ __launch_bounds__(256) void draft_router_scores_kernel(const float* x, const float* weight, unsigned rows, float* scores) {
+@@ -526,6 +584,30 @@ struct Buffer {
+ template <class T>
+ Buffer<T> upload_span(std::span<const T> s) { return Buffer<T>(s.data(), s.size()); }
+ 
++#if defined(STRIX_ENABLE_LOOKAHEAD)
++struct LookaheadBinding {
++    Buffer<std::uint32_t> mapping;
++    sl_hip_pair* handle = nullptr;
++    std::uint32_t size = 0;
++    LookaheadBinding() = default;
++    LookaheadBinding(const LookaheadBinding&) = delete;
++    LookaheadBinding& operator=(const LookaheadBinding&) = delete;
++    sl_status close() noexcept {
++        if (!handle) return SL_OK;
++        const auto status = sl_hip_pair_destroy(handle);
++        if (status == SL_OK || status == SL_DEVICE_ERROR) handle = nullptr;
++        return status;
++    }
++    ~LookaheadBinding() {
++        const auto status = close();
++        if (status != SL_OK)
++            std::fprintf(stderr, "strix-lookahead: binding cleanup failed: %s\n", sl_status_string(status));
++    }
++};
++#endif
++
++struct TraceCloser { void operator()(std::FILE* file) const noexcept { if (file) (void)std::fclose(file); } };
++
+ struct DeviceQ8 {
+     Buffer<std::uint8_t> bytes;
+     std::uint32_t width = 0, outputs = 0;
+@@ -669,7 +751,18 @@ struct DeviceDrafter::Impl {
+     Buffer<float> rope_table{static_cast<std::size_t>(max_rows) * rope_dim};
+     Buffer<std::uint32_t> zero{1};
+     // Draft step buffers (5 rows).
++#if defined(STRIX_ENABLE_LOOKAHEAD)
++    Buffer<std::uint32_t> tokens{lookahead_token_slots};
++    Buffer<sl_device_result> lookahead_results{block_size};
++    std::unique_ptr<LookaheadBinding> lookahead_binding;
++#else
+     Buffer<std::uint32_t> tokens{block_size + 1U};
++#endif
++    LookaheadStats lookahead_counts;
++    std::uint64_t lookahead_budget = 64ULL * 1024U * 1024U;
++    std::uint64_t vocabulary_epoch = 1, next_vocabulary_epoch = 1;
++    bool used_lookahead = false;
++    std::unique_ptr<std::FILE, TraceCloser> lookahead_trace;
+     Buffer<float> streams{static_cast<std::size_t>(block_size) * stream_width}, streams2{static_cast<std::size_t>(block_size) * stream_width};
+     Buffer<float> attn_mix{block_size * mix_count}, ffn_mix{block_size * mix_count}, pre_mix{block_size * mix_count},
+         identity{block_size * mix_count};
+@@ -725,6 +818,10 @@ struct DeviceDrafter::Impl {
+         Buffer<std::uint32_t> extra_ids;
+         Buffer<std::uint8_t> extra_rows;
+         Buffer<float> logits_extra;
++        std::uint64_t vocabulary_epoch = 0;
++#if defined(STRIX_ENABLE_LOOKAHEAD)
++        std::unique_ptr<LookaheadBinding> lookahead_binding;
++#endif
+     };
+     std::vector<Context> parked;
+     std::uint32_t active = 0;
+@@ -739,6 +836,10 @@ struct DeviceDrafter::Impl {
+         std::swap(extra_ids, other.extra_ids);
+         std::swap(extra_rows, other.extra_rows);
+         std::swap(logits_extra, other.logits_extra);
++        std::swap(vocabulary_epoch, other.vocabulary_epoch);
++#if defined(STRIX_ENABLE_LOOKAHEAD)
++        std::swap(lookahead_binding, other.lookahead_binding);
++#endif
+     }
+     // A fresh context: empty rings, position 0, the full vocabulary (as a new DeviceDrafter).
+     Context fresh_context() {
+@@ -752,6 +853,10 @@ struct DeviceDrafter::Impl {
+         ctx.extra_ids = Buffer<std::uint32_t>(8192);
+         ctx.extra_rows = Buffer<std::uint8_t>(static_cast<std::size_t>(8192) * output.row_bytes);
+         ctx.logits_extra = Buffer<float>(static_cast<std::size_t>(block_size) * 8192);
++        advance_epoch(ctx.vocabulary_epoch);
++#if defined(STRIX_ENABLE_LOOKAHEAD)
++        bind_lookahead(ctx.lookahead_binding, ctx.core, ctx.extra_host);
++#endif
+         return ctx;
+     }
+ 
+@@ -820,7 +925,140 @@ struct DeviceDrafter::Impl {
+         memlog("route tables + extra rows", gtt_mark, std::uint64_t{extra_capacity} * output.row_bytes);
+     }
+     std::uint64_t memlog_stages_expected = 0;
+-    ~Impl() { (void)hipStreamDestroy(stream); }
++    ~Impl() {
++#if defined(STRIX_ENABLE_LOOKAHEAD)
++        // Bindings borrow weights and this stream. Destroy both active and
++        // parked handles before the stream and the model buffers disappear.
++        lookahead_binding.reset();
++        for (auto& context : parked) context.lookahead_binding.reset();
++#endif
++        (void)hipStreamDestroy(stream);
++    }
++
++    void require_outside_capture() const {
++        hipStreamCaptureStatus capture = hipStreamCaptureStatusNone;
++        check(hipStreamIsCapturing(stream, &capture), "lookahead capture state");
++        if (capture != hipStreamCaptureStatusNone)
++            throw std::logic_error("strix-lookahead: binding changes require a stream outside graph capture");
++    }
++    void advance_epoch(std::uint64_t& epoch) {
++        if (next_vocabulary_epoch == std::numeric_limits<std::uint64_t>::max())
++            throw std::overflow_error("strix-lookahead: vocabulary epoch exhausted");
++        epoch = ++next_vocabulary_epoch;
++    }
++#if defined(STRIX_ENABLE_LOOKAHEAD)
++    void clear_lookahead(std::unique_ptr<LookaheadBinding>& binding) {
++        if (!binding) return;
++        const auto status = binding->close();
++        if (status != SL_OK) {
++            bump(lookahead_counts.errors);
++            throw std::runtime_error(std::string("strix-lookahead: close binding: ") + sl_status_string(status));
++        }
++        binding.reset();
++    }
++    void bind_lookahead(std::unique_ptr<LookaheadBinding>& binding, std::uint32_t selected_core,
++                        const std::vector<std::uint32_t>& selected_extra) {
++        if (!lookahead_counts.requested || world != 1U) return;
++        require_outside_capture();
++        if (binding) throw std::logic_error("strix-lookahead: attempted to overwrite a live binding");
++        auto fresh = std::make_unique<LookaheadBinding>();
++        fresh->size = selected_core + static_cast<std::uint32_t>(selected_extra.size());
++        std::vector<std::uint32_t> mapping;
++        if (!selected_extra.empty()) {
++            mapping.resize(fresh->size);
++            for (std::uint32_t i = 0; i < selected_core; ++i) mapping[i] = i;
++            std::copy(selected_extra.begin(), selected_extra.end(), mapping.begin() + selected_core);
++            fresh->mapping = Buffer<std::uint32_t>(mapping.size());
++            fresh->mapping.upload(mapping.data(), mapping.size(), stream);
++        }
++        sl_pair_config config;
++        sl_pair_config_init(&config);
++        config.vocabulary_size = fresh->size;
++        config.embedding_rows = vocab;
++        config.capacity_entries = lookahead_counts.capacity;
++        config.head_layout = SL_PAIR_HEAD_GLOBAL;
++        config.head = markov_head.data;
++        config.embeddings = markov_embed.data;
++        config.token_ids = fresh->mapping.data;
++        config.payload_budget_bytes = lookahead_budget;
++        // Each binding owns its mapping and lives under one immutable weight
++        // instance. The library never uses opaque identity bytes as a hash.
++        const auto status = sl_hip_pair_create(&config, stream, &fresh->handle);
++        if (status != SL_OK) {
++            bump(lookahead_counts.errors);
++            throw std::runtime_error(std::string("strix-lookahead: create binding: ") + sl_status_string(status));
++        }
++        binding = std::move(fresh);
++        bump(lookahead_counts.map_rebuilds);
++    }
++#endif
++    void invalidate_active_lookahead() {
++        require_outside_capture();
++#if defined(STRIX_ENABLE_LOOKAHEAD)
++        clear_lookahead(lookahead_binding);
++#endif
++        advance_epoch(vocabulary_epoch);
++    }
++    void bind_active_lookahead() {
++#if defined(STRIX_ENABLE_LOOKAHEAD)
++        bind_lookahead(lookahead_binding, core, extra_host);
++#endif
++    }
++    void reset_active_lookahead() {
++        require_outside_capture();
++#if defined(STRIX_ENABLE_LOOKAHEAD)
++        if (lookahead_binding) {
++            const auto status = sl_hip_pair_reset(lookahead_binding->handle);
++            if (status != SL_OK) {
++                bump(lookahead_counts.errors);
++                throw std::runtime_error(std::string("strix-lookahead: reset binding: ") + sl_status_string(status));
++            }
++        }
++#endif
++        advance_epoch(vocabulary_epoch);
++    }
++
++    void record_lookahead(const std::vector<std::uint32_t>& downloaded) {
++#if defined(STRIX_ENABLE_LOOKAHEAD)
++        if (used_lookahead) {
++            // Validate every position before the caller can observe a draft.
++            for (std::uint32_t r = 0; r < block_size; ++r)
++                if (downloaded[lookahead_status_offset + r] != SL_OK || downloaded[r + 1U] >= vocab) {
++                    bump(lookahead_counts.errors);
++                    throw std::runtime_error("strix-lookahead: device proposal failed; draft discarded");
++                }
++            for (std::uint32_t r = 0; r < block_size; ++r) {
++                bump(lookahead_counts.steps);
++                bump(downloaded[lookahead_hit_offset + r] ? lookahead_counts.hits : lookahead_counts.misses);
++            }
++        }
++#endif
++        if (!lookahead_trace) return;
++        const auto mode = !lookahead_counts.requested ? "baseline" : !used_lookahead ? "fallback" :
++                          lookahead_counts.capacity == 0U ? "uncached" : "cached";
++        std::fprintf(lookahead_trace.get(),
++            "{\"event\":\"draft\",\"context_id\":%u,\"vocabulary_epoch\":%llu,\"vocabulary_size\":%u,"
++            "\"capacity\":%u,\"mode\":\"%s\",\"predecessors\":[",
++            active, static_cast<unsigned long long>(vocabulary_epoch), core + static_cast<std::uint32_t>(extra_host.size()),
++            lookahead_counts.requested ? lookahead_counts.capacity : 0U, mode);
++        for (std::uint32_t r = 0; r < block_size; ++r)
++            std::fprintf(lookahead_trace.get(), "%s%u", r ? "," : "", downloaded[r]);
++        std::fputs("],\"cache_hits\":[", lookahead_trace.get());
++        for (std::uint32_t r = 0; r < block_size; ++r) {
++            std::uint32_t hit = 0;
++#if defined(STRIX_ENABLE_LOOKAHEAD)
++            if (used_lookahead) hit = downloaded[lookahead_hit_offset + r];
++#endif
++            std::fprintf(lookahead_trace.get(), "%s%u", r ? "," : "", hit);
++        }
++        std::fputc(']', lookahead_trace.get());
++        if (lookahead_counts.requested && !used_lookahead)
++            std::fprintf(lookahead_trace.get(), ",\"fallback_reason\":\"%s\"",
++                lookahead_counts.compiled ? "vocabulary_sharded" : "not_compiled");
++        std::fputs("}\n", lookahead_trace.get());
++        if (std::fflush(lookahead_trace.get()) != 0 || std::ferror(lookahead_trace.get()))
++            throw std::runtime_error("strix-lookahead: trace write failed");
++    }
+ 
+     // y[rows][outputs] = Q8_0 linear of x (A8 per row), launched in row chunks whose staged rows fit in LDS.
+     void q8_linear(const DeviceQ8& w, const float* xin, std::uint32_t rows, float* out) {
+@@ -1002,6 +1240,34 @@ struct DeviceDrafter::Impl {
+             v.weights = extra_rows.data + static_cast<std::size_t>(eb) * output.row_bytes; v.outputs = ec; v.out = logits_extra.data;
+             enqueue_product(WeightFormat::q8_0, v, stream);
+         }
++        used_lookahead = false;
++#if defined(STRIX_ENABLE_LOOKAHEAD)
++        if (lookahead_counts.requested && world == 1U) {
++            if (!lookahead_binding || lookahead_binding->size != cc + ec || cb != 0U || eb != 0U)
++                throw std::logic_error("strix-lookahead: head has no matching vocabulary binding");
++            for (std::uint32_t i = 0; i < rows; ++i) {
++                const auto* predecessor = i == 0U ? tokens.data : &lookahead_results.data[i - 1U].selection.token;
++                const auto status = sl_hip_pair_enqueue_step(lookahead_binding->handle, predecessor,
++                    cc ? logits.data + static_cast<std::size_t>(i) * cc : nullptr,
++                    ec ? logits_extra.data + static_cast<std::size_t>(i) * ec : nullptr, cc,
++                    lookahead_results.data + i, markov.data + static_cast<std::size_t>(i) * markov_rank, nullptr);
++                if (status != SL_OK) {
++                    bump(lookahead_counts.errors);
++                    throw std::runtime_error(std::string("strix-lookahead: enqueue failed; draft discarded: ") + sl_status_string(status));
++                }
++            }
++            hipLaunchKernelGGL(lookahead_confidence_kernel, dim3(rows), dim3(32), 0, stream,
++                confidence.data, x.data, markov.data, lookahead_results.data, tokens.data, confidence_out.data);
++            const auto error = hipGetLastError();
++            if (error != hipSuccess) {
++                bump(lookahead_counts.errors);
++                check(error, "lookahead confidence launch");
++            }
++            used_lookahead = true;
++            return;
++        }
++#endif
++        if (lookahead_counts.requested) bump(lookahead_counts.fallback_windows);
+         HeadView h{logits.data, cc, cb, logits_extra.data, ec, eb, extra_ids.data, markov_embed.data, markov_head.data, tokens.data,
+                    markov.data, best_values.data, best_ids.data};
+         for (std::uint32_t i = 0; i < rows; ++i) {
+@@ -1028,7 +1294,19 @@ struct DeviceDrafter::Impl {
+     }
+ };
+ 
+-DeviceDrafter::DeviceDrafter(const Weights& weights) : impl_(std::make_unique<Impl>(weights)) {}
++DeviceDrafter::DeviceDrafter(const Weights& weights) : impl_(std::make_unique<Impl>(weights)) {
++#if defined(STRIX_ENABLE_LOOKAHEAD)
++    impl_->lookahead_counts.compiled = true;
++#endif
++    if (const auto* path = std::getenv("STRIX_LOOKAHEAD_TRACE")) {
++        // A trace starts with the first draft and must not overwrite or append
++        // to another run. Use a distinct filename per process/drafter.
++        auto* file = std::fopen(path, "wx");
++        if (!file) throw std::runtime_error(std::string("strix-lookahead: create trace: ") + std::strerror(errno));
++        impl_->lookahead_trace.reset(file);
++    }
++    if (const auto capacity = environment_lookahead_capacity()) configure_lookahead(true, *capacity);
++}
+ DeviceDrafter::~DeviceDrafter() = default;
+ std::uint64_t DeviceDrafter::next() const noexcept { return impl_->next; }
+ void DeviceDrafter::set_vocabulary(const Vocab& vocabulary) {
+@@ -1039,10 +1317,12 @@ void DeviceDrafter::set_vocabulary(const Vocab& vocabulary) {
+         if (id < vocabulary.core || id >= vocab || seen[id]) throw std::invalid_argument("ds41 dspark draft vocabulary: bad extra id");
+         seen[id] = 1U;
+     }
++    m.invalidate_active_lookahead();
+     m.core = vocabulary.core;
+     m.extra_host.clear();
+     std::fill(m.member.begin(), m.member.end(), 0U);
+     m.push_extra(vocabulary.extra);
++    m.bind_active_lookahead();
+ }
+ std::size_t DeviceDrafter::add_vocabulary(std::span<const std::uint32_t> ids) {
+     auto& m = *impl_;
+@@ -1053,17 +1333,63 @@ std::size_t DeviceDrafter::add_vocabulary(std::span<const std::uint32_t> ids) {
+             fresh.push_back(id);
+         }
+     for (const auto id : fresh) m.member[id] = 0U; // push_extra sets them again
+-    m.push_extra(fresh);
++    if (!fresh.empty()) {
++        m.invalidate_active_lookahead();
++        m.push_extra(fresh);
++        m.bind_active_lookahead();
++    }
+     return fresh.size();
+ }
+ void DeviceDrafter::set_rank(std::uint32_t rank, std::uint32_t world, RankExchange exchange) {
+     if (world == 0U || world > 2U || rank >= world || (world == 2U && !exchange)) throw std::invalid_argument("ds41 dspark rank");
++    impl_->require_outside_capture();
+     impl_->rank = rank;
+     impl_->world = world;
+     impl_->exchange = std::move(exchange);
++    configure_lookahead(impl_->lookahead_counts.requested, impl_->lookahead_counts.capacity, impl_->lookahead_budget);
++}
++void DeviceDrafter::configure_lookahead(bool enabled, std::uint32_t capacity, std::uint64_t payload_budget_bytes) {
++    auto& m = *impl_;
++    m.require_outside_capture();
++    if (enabled) (void)lookahead_footprint(capacity, sequences(), payload_budget_bytes);
++    // All handles borrow the same stream/model; reconfiguration is a binding
++    // boundary, not a reset/rebind performed from the inference hot path.
++#if defined(STRIX_ENABLE_LOOKAHEAD)
++    m.clear_lookahead(m.lookahead_binding);
++    for (auto& context : m.parked) m.clear_lookahead(context.lookahead_binding);
++#endif
++    m.lookahead_counts.requested = enabled;
++    m.lookahead_counts.capacity = capacity;
++    m.lookahead_budget = payload_budget_bytes;
++    m.advance_epoch(m.vocabulary_epoch);
++    m.bind_active_lookahead();
++    for (std::size_t i = 0; i < m.parked.size(); ++i) {
++        if (i == m.active) continue;
++        auto& context = m.parked[i];
++        m.advance_epoch(context.vocabulary_epoch);
++#if defined(STRIX_ENABLE_LOOKAHEAD)
++        m.bind_lookahead(context.lookahead_binding, context.core, context.extra_host);
++#endif
++    }
++}
++LookaheadStats DeviceDrafter::lookahead_stats() const noexcept {
++    auto result = impl_->lookahead_counts;
++    // Report effective capacity; a disabled adapter has no resident cache.
++    if (!result.requested) result.capacity = 0U;
++    result.vocabulary_size = impl_->core + static_cast<std::uint32_t>(impl_->extra_host.size());
++#if defined(STRIX_ENABLE_LOOKAHEAD)
++    result.active = result.requested && impl_->world == 1U && impl_->lookahead_binding != nullptr;
++    const auto payload = [&](const std::unique_ptr<LookaheadBinding>& binding) {
++        if (binding) bump(result.payload_bytes, std::uint64_t{result.capacity} * binding->size * sizeof(float));
++    };
++    payload(impl_->lookahead_binding);
++    for (const auto& context : impl_->parked) payload(context.lookahead_binding);
++#endif
++    return result;
+ }
+ Vocab DeviceDrafter::vocabulary() const { return Vocab{impl_->core, impl_->extra_host}; }
+ void DeviceDrafter::reset() {
++    impl_->reset_active_lookahead();
+     for (auto& s : impl_->stage) check(hipMemsetAsync(s.ring.data, 0, s.ring.count, impl_->stream), "clear ring");
+     check(hipStreamSynchronize(impl_->stream), "reset");
+     impl_->next = 0;
+@@ -1113,12 +1439,44 @@ DeviceDrafter::Footprint DeviceDrafter::footprint(const Weights& w, std::uint32_
+     e1 += B * K * inter + B * inter;                                                                               // act / shared codes
+     e4 += slots + (slots + 1U) + 3U * B * K + B;                                                                   // device routes
+     e4 += B * vocab + 2U + 2U + B * markov_rank + 2U * u64{markov_blocks} + B;                                     // logits .. confidence_out
++#if defined(STRIX_ENABLE_LOOKAHEAD)
++    e4 += 2U * B;  // status/hit words transferred with the normal token download
++    e1 += B * sizeof(sl_device_result);
++#endif
+     f.scratch = 4U * e4 + e1;
+     // a context: the stage rings, the extra vocabulary ids / head rows and their logits (the active one lives in Impl)
+     const u64 context = u64{stages} * window * entry_bytes + 8192U * 4U + 8192U * w.output.row_bytes() + B * 8192U * 4U;
+     f.contexts = context * std::max<std::uint32_t>(sequences, 1U);
++    if (const auto capacity = environment_lookahead_capacity()) f.lookahead = lookahead_footprint(*capacity, sequences);
++    std::uint64_t total = 0;
++    for (const auto bytes : {f.weights, f.scratch, f.contexts, f.lookahead}) {
++        if (bytes > std::numeric_limits<std::uint64_t>::max() - total)
++            throw std::overflow_error("strix-lookahead: total device reservation overflow");
++        total += bytes;
++    }
+     return f;
+ }
++std::uint64_t DeviceDrafter::lookahead_footprint(std::uint32_t capacity, std::uint32_t sequences,
++                                              std::uint64_t payload_budget_bytes) {
++#if defined(STRIX_ENABLE_LOOKAHEAD)
++    const auto payload = std::uint64_t{capacity} * vocab * sizeof(float);
++    if (payload_budget_bytes != 0U && payload > payload_budget_bytes)
++        throw std::invalid_argument("strix-lookahead: full-vocabulary payload exceeds the per-context budget");
++    // Private package 0.2.1: entry={uint32 token,valid}; partial winner is four
++    // 32-bit words, at most 512 blocks. Reserve mapping even for dense vocabularies.
++    const auto one = payload + std::uint64_t{vocab} * sizeof(std::uint32_t) +
++                     std::uint64_t{capacity} * 2U * sizeof(std::uint32_t) + 512U * 4U * sizeof(std::uint32_t);
++    const auto contexts = std::max<std::uint32_t>(sequences, 1U);
++    if (one > std::numeric_limits<std::uint64_t>::max() / contexts)
++        throw std::overflow_error("strix-lookahead: context device reservation overflow");
++    return one * contexts;
++#else
++    (void)capacity;
++    (void)sequences;
++    (void)payload_budget_bytes;
++    return 0;
++#endif
++}
+ std::uint32_t DeviceDrafter::sequences() const noexcept { return impl_->parked.empty() ? 1U : static_cast<std::uint32_t>(impl_->parked.size()); }
+ void DeviceDrafter::select(std::uint32_t sequence) {
+     auto& m = *impl_;
+@@ -1223,9 +1581,14 @@ Draft DeviceDrafter::draft(std::uint32_t token, bool keep_logits, DraftTimes* ti
+     enqueue_hc_pre(m.streams.data, rows, pre, mix_count, m.x.data, m.stream);
+     enqueue_rms_norm(m.x.data, rows, hidden, m.final_norm.data, m.xn.data, m.stream);
+     m.head(rows);
+-    const auto tokens = m.tokens.download(m.stream);
++    std::size_t downloaded_tokens = block_size + 1U;
++#if defined(STRIX_ENABLE_LOOKAHEAD)
++    if (m.used_lookahead) downloaded_tokens = lookahead_token_slots;
++#endif
++    const auto tokens = m.tokens.download(m.stream, downloaded_tokens);
++    m.record_lookahead(tokens);
+     const auto conf = m.confidence_out.download(m.stream);
+-    std::copy(tokens.begin(), tokens.end(), out.tokens.begin());
++    std::copy_n(tokens.begin(), block_size + 1U, out.tokens.begin());
+     std::copy(conf.begin(), conf.end(), out.confidence.begin());
+     const auto local = m.local_rows();
+     out.candidates.fill(local.core_count + local.extra_count);
+diff --git a/tests/hip_ds41_dspark_tests.hip b/tests/hip_ds41_dspark_tests.hip
+index ca35fd23c0c8ee1a7b58a18795ae4b2dc6b93c09..511ea1ca9673c9ff4348d2052c90188ce23ed08b 100644
+--- a/tests/hip_ds41_dspark_tests.hip
++++ b/tests/hip_ds41_dspark_tests.hip
+@@ -1,3 +1,4 @@
++// Modified for private StrixLookahead integration, 2026-10-26.
+ // DSpark drafter fixtures: every device kernel against the host reference bitwise on synthetic data,
+ // then (with STRIX_DS41_Q2_GGUF and STRIX_DS41_DSPARK_GGUF) the whole drafter on the real weights:
+ // main rows, ring seeding with wrap-around, draft steps (tokens, confidence, logits, every stage's
+@@ -13,6 +14,7 @@
+ #include <hip/hip_runtime.h>
+ 
+ #include <algorithm>
++#include <array>
+ #include <bit>
+ #include <chrono>
+ #include <cmath>
+@@ -213,6 +215,117 @@ void compare_drafts(const Draft& dev, const Draft& host, const std::string& labe
+     std::cout << '\n';
+ }
+ 
++// The same resident weights, committed rings and input token exercise the
++// original fused head, the uncached library and the cached library. Keeping
++// logits also checks the predecessor embeddings consumed by confidence.
++void test_lookahead_binding(DeviceDrafter& device, std::span<const float> main) {
++    const auto initial = device.lookahead_stats();
++    if (!initial.compiled) {
++        std::cout << "lookahead integration checks skipped (private backend not compiled)\n";
++        return;
++    }
++    const auto failures_before = failures;
++    const auto original = [&](const Vocab& vocabulary, std::uint32_t token) {
++        device.configure_lookahead(false);
++        expect(!device.lookahead_stats().active && device.lookahead_stats().capacity == 0U &&
++                   device.lookahead_stats().payload_bytes == 0U,
++               "disabled integration reports zero effective capacity and payload");
++        device.set_vocabulary(vocabulary);
++        return device.draft(token, true);
++    };
++    const auto compare_modes = [&](const Vocab& vocabulary, const std::string& label) {
++        const auto reference = original(vocabulary, 42U);
++        device.configure_lookahead(true, 0U);
++        const auto before_uncached = device.lookahead_stats();
++        compare_drafts(device.draft(42U, true), reference, "lookahead uncached " + label);
++        const auto after_uncached = device.lookahead_stats();
++        expect(after_uncached.active && after_uncached.steps == before_uncached.steps + block_size &&
++                   after_uncached.hits == before_uncached.hits && after_uncached.misses == before_uncached.misses + block_size,
++               "uncached integration executes all proposal rows without hits");
++        device.configure_lookahead(true, 16U);
++        compare_drafts(device.draft(42U, true), reference, "lookahead cold " + label);
++        compare_drafts(device.draft(42U, true), reference, "lookahead repeated " + label);
++    };
++    compare_modes(Vocab{}, "full vocabulary");
++    Vocab first;
++    first.core = 32768;
++    first.extra = {40000U, 100000U, 128000U};
++    compare_modes(first, "core and extra vocabulary");
++
++    // Equal sizes and stable source buffers do not imply an equal ordered map.
++    Vocab reordered = first;
++    std::reverse(reordered.extra.begin(), reordered.extra.end());
++    const auto reordered_reference = original(reordered, 42U);
++    Vocab grown = reordered;
++    grown.extra.push_back(125000U);
++    const auto grown_reference = original(grown, 42U);
++    device.set_vocabulary(first);
++    device.configure_lookahead(true, 16U);
++    (void)device.draft(42U, false);
++    const auto before_reorder = device.lookahead_stats();
++    device.set_vocabulary(reordered);
++    expect(device.lookahead_stats().map_rebuilds == before_reorder.map_rebuilds + 1U,
++           "same-size vocabulary reordering creates a new immutable binding");
++    compare_drafts(device.draft(42U, true), reordered_reference, "lookahead reordered mapping");
++    const std::array<std::uint32_t, 3> extra{125000U, 125000U, 42U};
++    const auto before_growth = device.lookahead_stats();
++    expect(device.add_vocabulary(extra) == 1U, "lookahead vocabulary growth deduplicates ids");
++    expect(device.lookahead_stats().map_rebuilds == before_growth.map_rebuilds + 1U,
++           "vocabulary growth rebuilds even when the source allocation has spare capacity");
++    compare_drafts(device.draft(42U, true), grown_reference, "lookahead appended candidate");
++    const auto before_noop = device.lookahead_stats();
++    expect(device.add_vocabulary(extra) == 0U, "lookahead repeated context ids do not grow the vocabulary");
++    expect(device.lookahead_stats().map_rebuilds == before_noop.map_rebuilds,
++           "no-op vocabulary additions retain the binding");
++
++    // A one-candidate context gives a deterministic reuse pattern independent
++    // of the checkpoint: all five predecessors are the same global token.
++    const Vocab one{0U, {100000U}};
++    device.configure_lookahead(false);
++    device.set_sequences(2U);
++    device.select(1U);
++    device.set_vocabulary(one);
++    device.append(main.first(static_cast<std::size_t>(3U) * hidden), 3U);
++    const auto one_reference = device.draft(100000U, true);
++    device.configure_lookahead(true, 16U);
++    const auto check_reuse = [&](std::uint64_t expected_hits, const std::string& label) {
++        const auto before = device.lookahead_stats();
++        compare_drafts(device.draft(100000U, true), one_reference, label);
++        const auto after = device.lookahead_stats();
++        expect(after.steps == before.steps + block_size && after.hits == before.hits + expected_hits &&
++                   after.misses == before.misses + block_size - expected_hits,
++               label + ": exact per-step hit/miss counters");
++    };
++    check_reuse(block_size - 1U, "lookahead singleton cold");
++    check_reuse(block_size, "lookahead singleton warm");
++    device.select(0U);
++    compare_drafts(device.draft(42U, true), grown_reference, "lookahead original context restored");
++    device.select(1U);
++    check_reuse(block_size, "lookahead warm cache survives context swaps");
++    device.reset();
++    device.append(main.first(static_cast<std::size_t>(3U) * hidden), 3U);
++    check_reuse(block_size - 1U, "lookahead reset invalidates the selected context");
++    // set_sequences recreates every context except context zero, even when
++    // its requested count is unchanged. No old slot-one cache may survive.
++    device.set_sequences(2U);
++    device.select(1U);
++    expect(device.next() == 0U, "recreated context starts with empty rings");
++    device.set_vocabulary(one);
++    device.append(main.first(static_cast<std::size_t>(3U) * hidden), 3U);
++    check_reuse(block_size - 1U, "lookahead recreated context has a cold cache");
++    device.select(0U);
++    device.set_sequences(1U);
++    device.set_vocabulary(Vocab{});
++    device.configure_lookahead(initial.requested, initial.capacity);
++    // The campaign requires this receipt and a successful process exit. A
++    // binary that skips the model or private backend cannot qualify timing.
++    if (failures == failures_before)
++        std::cout << "STRIX_LOOKAHEAD_MODEL_TEST {\"schema_version\":1,\"backend\":\"hip\","
++                     "\"adapter_compiled\":true,\"real_weights\":true,"
++                     "\"fixture\":\"real_weights_synthetic_hidden\","
++                     "\"draft_outputs_bitwise_equal\":true,\"failures\":0}\n";
++}
++
+ void test_real(const Files& f) {
+     const auto t0 = std::chrono::steady_clock::now();
+     const auto model = load_model(f);
+@@ -314,6 +427,8 @@ void test_real(const Files& f) {
+         device.set_vocabulary(Vocab{});
+     }
+ 
++    test_lookahead_binding(device, host_main);
++
+     // Smoke timing (single runs, warm): draft steps without keeping logits.
+     for (int i = 0; i < 3; ++i) {
+         DraftTimes t;

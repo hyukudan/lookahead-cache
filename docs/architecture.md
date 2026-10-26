@@ -11,12 +11,17 @@ is the first device target; HIP and CUDA use the same pair-operation contract.
 | Static pair operator | `pair.h` | Tested CPU reference, rank-256 FP16 inputs, FP32 bias cache and greedy selection. |
 | Device pair operator | `device.h` | HIP and CUDA implementations compile; physical GPU execution is not yet qualified. |
 | Certified candidate selector | `selection.h` | Optional tested CPU reference with immutable snapshots and exact fallback. |
-| Engine adapter | Integration contract | Designed, not wired into the inference engine. |
+| Engine adapter | Private pinned HIP patch | Implemented with per-request bindings and three-variant qualification; physical-device/model execution pending. |
 
 The generic cache and the pair operator have separate storage and lifetime
 mechanisms. The pair operator does not call the host LRU cache on its device path.
 The engine retains model execution, verification, sampling policy, KV/recurrent
 state and commit/rollback.
+
+Version 0.3 distributes the adapter only in the private repository. Its
+[integration guide](engine-integration.md) describes the pinned engine revision,
+opt-in controls, context invalidation and evidence collection. The CUDA library
+shares the pair contract; the engine adapter currently uses HIP.
 
 ## Static pair computation
 

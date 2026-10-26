@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "engine_repository": "hyukudan/strix-halo-engine-lab",
+  "engine_base_commit": "683e69e91eb2203addf016e2cfdead8217e65fa2",
+  "patch_file": "adapter.patch",
+  "patch_sha256": "4969214edcb13660b522c524cfcdcb4af52453fefc7e4f83cd0f2aa407378d62",
+  "package_version": "0.3.0",
+  "required_library_version": "0.2.1",
+  "engine_license": "Apache-2.0",
+  "publication_scope": "private_repository_only",
+  "files": [
+    {
+      "path": "CMakeLists.txt",
+      "before_sha256": "3d8bb684f79f72a80b4e71e1dbedef642f0dde7d24dea1fb93c679f0d54ea7ac",
+      "after_sha256": "a16c46049e7eb729e4095faf5c23df2ded794ff909f77890a2e2bf11b420f4de"
+    },
+    {
+      "path": "apps/deepseek41_batch_main.cpp",
+      "before_sha256": "fc895aed1d272e3b1dcbd4c54086dbf65a119d88cd8a0725def8cd4e84d4bbc4",
+      "after_sha256": "adb01dbc68f9f031f037eca4b5c7b984066a69ee12702fc73e0a73fa63497fca"
+    },
+    {
+      "path": "include/strix/hip_ds41_dspark.hpp",
+      "before_sha256": "81452db3106e011fb929b21f75833f29d1aff22fdc2f1f0f516a44a4b79e2e87",
+      "after_sha256": "16f3e721f6e94215325b3c3949bb7d1d4986c6f9618d0e04b2e278aec05b1b4d"
+    },
+    {
+      "path": "src/hip_ds41_dspark.hip",
+      "before_sha256": "69776bc47e2006b9cad040d98461f900bd3e5f28e7c1bc32b7973a0046b9e0a7",
+      "after_sha256": "ffa62a63a5dfc37d00508fdf1810574c59e08e161e370c19201f56c35796db0c"
+    },
+    {
+      "path": "tests/hip_ds41_dspark_tests.hip",
+      "before_sha256": "005ab15375ae2dfb5969a50f63b87ea6907c64d7dd45a487e5991a62d7b0dcbd",
+      "after_sha256": "080a758bcd03a35e36d1b199c4b643886f08455c1ccf808f297fdc835caa4315"
+    }
+  ]
+}

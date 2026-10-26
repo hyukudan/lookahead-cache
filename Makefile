@@ -52,6 +52,9 @@ test: $(BUILD_DIR)/sl_cache_test $(BUILD_DIR)/sl_pair_test $(BUILD_DIR)/sl_selec
 
 test-tools:
 	python3 tests/evidence_tools_test.py
+	python3 tests/engine_qualification_test.py
+	python3 tests/predecessor_trace_test.py
+	python3 tests/engine_patch_test.py
 
 example: $(BUILD_DIR)/sl_cache_example
 	$(BUILD_DIR)/sl_cache_example

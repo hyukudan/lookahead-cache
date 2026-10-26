@@ -1,0 +1,134 @@
+{
+  "schema_version": 1,
+  "kind": "private_engine_adapter_build_validation",
+  "version": "0.3.0",
+  "date_utc": "2026-10-26",
+  "status": "build_and_host_checks_passed_native_execution_unavailable",
+  "engine": {
+    "repository": "hyukudan/strix-halo-engine-lab",
+    "base_commit": "683e69e91eb2203addf016e2cfdead8217e65fa2",
+    "patch_sha256": "4969214edcb13660b522c524cfcdcb4af52453fefc7e4f83cd0f2aa407378d62",
+    "patched_files": [
+      {
+        "path": "CMakeLists.txt",
+        "before_sha256": "3d8bb684f79f72a80b4e71e1dbedef642f0dde7d24dea1fb93c679f0d54ea7ac",
+        "after_sha256": "a16c46049e7eb729e4095faf5c23df2ded794ff909f77890a2e2bf11b420f4de"
+      },
+      {
+        "path": "apps/deepseek41_batch_main.cpp",
+        "before_sha256": "fc895aed1d272e3b1dcbd4c54086dbf65a119d88cd8a0725def8cd4e84d4bbc4",
+        "after_sha256": "adb01dbc68f9f031f037eca4b5c7b984066a69ee12702fc73e0a73fa63497fca"
+      },
+      {
+        "path": "include/strix/hip_ds41_dspark.hpp",
+        "before_sha256": "81452db3106e011fb929b21f75833f29d1aff22fdc2f1f0f516a44a4b79e2e87",
+        "after_sha256": "16f3e721f6e94215325b3c3949bb7d1d4986c6f9618d0e04b2e278aec05b1b4d"
+      },
+      {
+        "path": "src/hip_ds41_dspark.hip",
+        "before_sha256": "69776bc47e2006b9cad040d98461f900bd3e5f28e7c1bc32b7973a0046b9e0a7",
+        "after_sha256": "ffa62a63a5dfc37d00508fdf1810574c59e08e161e370c19201f56c35796db0c"
+      },
+      {
+        "path": "tests/hip_ds41_dspark_tests.hip",
+        "before_sha256": "005ab15375ae2dfb5969a50f63b87ea6907c64d7dd45a487e5991a62d7b0dcbd",
+        "after_sha256": "080a758bcd03a35e36d1b199c4b643886f08455c1ccf808f297fdc835caa4315"
+      }
+    ],
+    "public_repository_modified": false
+  },
+  "library": {
+    "installed_package_version": "0.2.1",
+    "required_package_version": "0.2.1",
+    "installed_prefix": "/workspace/scratch/4fc981d9ad56/strix-lookahead/build-hip/installed-consumer/prefix",
+    "implementation_changed_since_0_2_1": false,
+    "source_sha256": {
+      "include/strix_lookahead/cache.h": "4018a29ed9258a1bef8be00671ff0c893badeb7dfeb8e6408a661b1089207777",
+      "include/strix_lookahead/device.h": "1994733a6e69953f33260a943ce20c5e5ddf934cc8cffad2255daaf044196749",
+      "include/strix_lookahead/pair.h": "472bd40d300767ba543216e5533e961333068094dbe4e22279bf89ac3079edfb",
+      "include/strix_lookahead/selection.h": "4fcdac336d7aeafe4ea88bcc60ee60da9063e87913155d7a33e51bbb578e7f8c",
+      "src/cache.cpp": "0b904202615b440529bca0fff393eb1855f42002e21d30e2cb562e365770ef68",
+      "src/device_cuda.cu": "9a237fd1d0acaddceefb41e66312607323efce2fac6342e45b6a52922f0ff4ae",
+      "src/device_hip.hip": "65047fcd52c7292456e881b13dbb10f96cffc63ca786e7ae60528ac846f2401d",
+      "src/device_kernels.hpp": "f85ca7a6bde58365ad3122886801261ec20624730030e01c9471e7b8df347ca1",
+      "src/device_runtime.hpp": "2c439c3b4000308ad5cc4d28b0086f3c4ed786bd90bf5d354d7bee4fc07e3036",
+      "src/pair.cpp": "438050de7121b00808dbc399daabee625db60c6bc911759e753964b4e3d8c410",
+      "src/selection.cpp": "7c1f5573e2bf6e1a80e3f996d054a5435a2a78b00efe61533693c59212759fe4"
+    }
+  },
+  "toolchain": {
+    "cmake": "cmake version 4.4.4",
+    "host_compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04) 13.3.0",
+    "hip_compiler": "AMD clang version 24.0.0git (https://github.com/ROCm/llvm-project.git d6f6cb691863e9258034ab48c1dfce21689d5606)",
+    "architecture": "gfx1151",
+    "adapter_flags": "-O3 -DNDEBUG -std=gnu++20 --offload-arch=gfx1151 -isystem /workspace/scratch/4fc981d9ad56/toolchains/rocm/_rocm_sdk_devel/include -mno-wavefrontsize64 -fno-fast-math -ffp-contract=off -fhip-fp32-correctly-rounded-divide-sqrt -fdenormal-fp-math=ieee -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror",
+    "adapter_defines": "-DSTRIX_ENABLE_LOOKAHEAD=1 -DUSE_PROF_API=1 -D__HIP_PLATFORM_AMD__=1 -D__HIP_ROCclr__=1"
+  },
+  "compiled_targets": [
+    {
+      "target": "strix-deepseek41-batch",
+      "sha256": "899d0c4590062a9ab5fd3d9dcc05bfd8b0dc060d2c5c99b7b285e25103997fa6",
+      "bytes": 21936056
+    },
+    {
+      "target": "strix-hip-ds41-dspark-tests",
+      "sha256": "4bda8402e7896e2516b677c3533c72b99e6612ccf6394ddb1f898a490bbad52e",
+      "bytes": 6077808
+    },
+    {
+      "target": "strix-ds41-dspark-tests",
+      "sha256": "afdb202c3019d3c28f8e5afab232d207adfb2d414528dc0cd99113b89d1eff92",
+      "bytes": 409104
+    }
+  ],
+  "adapter_option_off_compile": {
+    "status": "passed",
+    "object_sha256": "aa2a8d419456f227b85b0380881e063f72811bb4869a071de3ce2067abab98ec",
+    "diagnostic_log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "host_ctest": {
+    "status": "passed",
+    "targets": 8,
+    "log_sha256": "917bbb7e766c3af387bdb9b8ae50581dab5644b1fc4e9299c133aa1d949ab84f",
+    "log": "Test project /workspace/scratch/4fc981d9ad56/strix-lookahead/build-v03\n    Start 1: cache_contract\n1/8 Test #1: cache_contract ...................   Passed    0.00 sec\n    Start 2: pair_contract\n2/8 Test #2: pair_contract ....................   Passed    0.02 sec\n    Start 3: selection_contract\n3/8 Test #3: selection_contract ...............   Passed    0.01 sec\n    Start 4: c_abi_smoke\n4/8 Test #4: c_abi_smoke ......................   Passed    0.00 sec\n    Start 5: evidence_tools_contract\n5/8 Test #5: evidence_tools_contract ..........   Passed    1.85 sec\n    Start 6: engine_qualification_contract\n6/8 Test #6: engine_qualification_contract ....   Passed    5.98 sec\n    Start 7: predecessor_trace_contract\n7/8 Test #7: predecessor_trace_contract .......   Passed    0.38 sec\n    Start 8: engine_patch_contract\n8/8 Test #8: engine_patch_contract ............   Passed    0.27 sec\n\n100% tests passed out of 8\n\nTotal Test time (real) =   8.52 sec\n",
+    "tool_test_groups": {
+      "engine_qualification": 11,
+      "predecessor_trace": 6,
+      "engine_patch": 6
+    },
+    "engine_collector_fixtures": "synthetic mocks only, not native performance evidence"
+  },
+  "engine_runtime_attempts": [
+    {
+      "target": "strix-ds41-dspark-tests",
+      "exit_code": 0,
+      "log_sha256": "6f7a4c44ae92516b65139ee0c88d8e86964694e980338e0c375dcd8eab472935",
+      "log": "speculative simulation, policy 0: 231 windows for 396 tokens, tokens identical\nspeculative simulation, policy 1: 154 windows for 396 tokens, tokens identical\nspeculative simulation, policy 2: 143 windows for 396 tokens, tokens identical\nspeculative simulation, policy 3: 173 windows for 396 tokens, tokens identical\ndriver, window fixed:0: 299 windows, 0 of 0 drafts accepted, 304 target steps, tokens identical\ndriver, window fixed:1: 170 windows, 129 of 170 drafts accepted, 304 target steps, tokens identical\ndriver, window fixed:3: 111 windows, 189 of 333 drafts accepted, 304 target steps, tokens identical\ndriver, window fixed:5: 94 windows, 206 of 470 drafts accepted, 304 target steps, tokens identical\ndriver, window auto: 98 windows, 202 of 289 drafts accepted, 304 target steps, tokens identical\ndriver, window survival: 110 windows, 189 of 276 drafts accepted, 304 target steps, tokens identical\ndriver, window controller: 96 windows, 204 of 272 drafts accepted, 304 target steps, tokens identical\ncontroller: costs, sweep, gate, exploration and rank symmetry ok\nbatch controller: costs, two stages, budget, exploration, local search and toy batch ok\nds41 dspark CPU tests passed\n"
+    },
+    {
+      "target": "strix-hip-ds41-dspark-tests",
+      "exit_code": 2,
+      "log_sha256": "dc1cbde3b46e0b87a9e2528348015dc859c483b35b33e0a8e4a6584299106dc6",
+      "log": "error: hipMalloc: no ROCm-capable device is detected\n"
+    }
+  ],
+  "patch_validation": {
+    "exact_base_checkout": true,
+    "apply_passed": true,
+    "reverse_passed": true,
+    "checkout_clean_after_reverse": true
+  },
+  "native_model_campaign": {
+    "status": "not_run",
+    "reason": "No supported GPU or local real-model assets available in this environment. No model equivalence or throughput result is claimed."
+  },
+  "hardware_speedup": null,
+  "build_source_binding": "not_attested",
+  "limits": [
+    "Compilation is not GPU numerical validation.",
+    "The host drafter tests are simulations and contracts.",
+    "The native fixture uses real weights with synthetic hidden inputs; a real-prompt model campaign is separate.",
+    "The engine adapter is HIP only. CUDA library support is separate.",
+    "No two-node, adaptive-controller or competing-system performance claim."
+  ]
+}
