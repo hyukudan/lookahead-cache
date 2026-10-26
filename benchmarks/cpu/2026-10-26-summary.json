@@ -1,0 +1,422 @@
+{
+  "schema_version": 1,
+  "kind": "synthetic_cpu_pair_component_campaign",
+  "date": "2026-10-26",
+  "synthetic_inputs": true,
+  "device_measurement": false,
+  "end_to_end_inference": false,
+  "optimized_engine_comparison": false,
+  "baseline": "same_cpu_reference_capacity_zero",
+  "hardware": {
+    "cpu_model": "AMD EPYC 9V74 80-Core Processor",
+    "machine": "x86_64",
+    "system": "Linux",
+    "pinned_cpu": 0
+  },
+  "compiler_version": "13.3.0",
+  "library_compile_flags": "-O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -ffp-contract=off -fno-fast-math",
+  "benchmark_compile_flags": "-O3 -DNDEBUG -std=gnu++20",
+  "flag_origin": "Adjacent CMake flags.make files; no source-to-binary attestation.",
+  "kernel": "6.18.55",
+  "environment_limits": {
+    "dedicated_machine": false,
+    "frequency_control": "not enforced",
+    "background_activity": "workspace builds paused; unrelated host activity not controlled"
+  },
+  "method": {
+    "rank": 256,
+    "seed": "0x5168724c6f6f6b31",
+    "steps_per_repeat": 12,
+    "repeats_per_process": 4,
+    "processes_per_configuration": 3,
+    "reset_before_each_internal_repeat": true,
+    "order_within_each_mode": "uncached,cached; cached,uncached; uncached,cached; cached,uncached",
+    "mode_order": [
+      "warm",
+      "cold",
+      "mixed",
+      "collision"
+    ],
+    "configuration_orders": [
+      [
+        [
+          32768,
+          16
+        ],
+        [
+          32768,
+          128
+        ],
+        [
+          129280,
+          16
+        ]
+      ],
+      [
+        [
+          32768,
+          128
+        ],
+        [
+          129280,
+          16
+        ],
+        [
+          32768,
+          16
+        ]
+      ],
+      [
+        [
+          129280,
+          16
+        ],
+        [
+          32768,
+          16
+        ],
+        [
+          32768,
+          128
+        ]
+      ]
+    ],
+    "timed_region": "synchronous sl_pair_step only; creation/reset/setup excluded; initial cache miss included",
+    "diagnostic_outputs_requested": false,
+    "reported_time": "median across three process means (each mean is total_ns / 48)",
+    "reported_ratio": "median across three paired process ratios (uncached_total_ns / cached_total_ns)",
+    "range": "minimum and maximum of three process ratios; not a confidence interval"
+  },
+  "correctness": {
+    "preflight": "existing collector validator passed at V64,capacity16,8steps,2repeats before measurement",
+    "checked_fields": [
+      "token",
+      "vocabulary_row",
+      "score_float32_bits"
+    ],
+    "paired_outputs_checked": 1728,
+    "timed_operator_calls": 3456,
+    "all_outputs_equivalent": true,
+    "source_and_binary_unchanged_across_campaign": true,
+    "full_bias_vector_comparison_in_timed_path": false
+  },
+  "provenance": {
+    "source_sha256": {
+      "src/pair.cpp": "438050de7121b00808dbc399daabee625db60c6bc911759e753964b4e3d8c410",
+      "src/cache.cpp": "0b904202615b440529bca0fff393eb1855f42002e21d30e2cb562e365770ef68",
+      "include/strix_lookahead/pair.h": "472bd40d300767ba543216e5533e961333068094dbe4e22279bf89ac3079edfb",
+      "include/strix_lookahead/cache.h": "4018a29ed9258a1bef8be00671ff0c893badeb7dfeb8e6408a661b1089207777",
+      "examples/pair_benchmark.cpp": "5970f2d583b16d8bebca1b456fee83f460abf45d28ded7bc857ed815a465c00c",
+      "CMakeLists.txt": "b23a000e8a8c31a4679391082df62d7608552d66220921393254ca97b3a7f334",
+      "Makefile": "15020fdf0b44bdba764fb8ee8c0d4ab0ba0c687fadf3560e988deb48a9540f6b",
+      "tools/run_cpu_benchmark.py": "54f3f7d62ce42d9b2ad7e8d434afd9873c5927c8498d06fe30c4995ff9d60f68",
+      "tools/evidence.py": "11fff65d2b377fe7f679735d7e686ab26b244b3654ad40e7970b7efbd69afdda"
+    },
+    "executable_sha256": {
+      "sl_pair_benchmark": "32470859b87f7f8e417549e4e47eab4b0079ab46927f16c16c6bb8937f627912"
+    },
+    "build_source_binding": "not_attested"
+  },
+  "records": [
+    {
+      "file": "2026-10-26-v32768-c16-run1.json",
+      "sha256": "b28c0e9dd0cc0483a5507fbdf6e0512a892a16dc0d66d87f50f9e0298e264a8d",
+      "bytes": 7983
+    },
+    {
+      "file": "2026-10-26-v32768-c16-run2.json",
+      "sha256": "79403fad1a5e747b04d38456593d30fbee72962ea266571701c5702eaf246f82",
+      "bytes": 7985
+    },
+    {
+      "file": "2026-10-26-v32768-c16-run3.json",
+      "sha256": "2be43913c3aeb6eda9818d5ee97898013657997aacedbfdf86fef4fb73b493aa",
+      "bytes": 7989
+    },
+    {
+      "file": "2026-10-26-v32768-c128-run1.json",
+      "sha256": "6a1e45ca57383a9d879597c9127ab7611e6e0ad555b4706c8c911cc10f75646d",
+      "bytes": 7985
+    },
+    {
+      "file": "2026-10-26-v32768-c128-run2.json",
+      "sha256": "1cb4aa10e9269d2a9c770e9ea11f4ff64a9f031ba1eecfbb400909803d2c2caf",
+      "bytes": 7987
+    },
+    {
+      "file": "2026-10-26-v32768-c128-run3.json",
+      "sha256": "468a34aaf291e222f8202bf8562d4871a3b95449bc5299a4f9d1ac409598dc66",
+      "bytes": 7987
+    },
+    {
+      "file": "2026-10-26-v129280-c16-run1.json",
+      "sha256": "01e6e274f2939a5ec7e3071b9b32bb46b3a5ff359eb9492802498d64d67c2039",
+      "bytes": 8013
+    },
+    {
+      "file": "2026-10-26-v129280-c16-run2.json",
+      "sha256": "78b18ebad892997456429b0085b17e47ee6089a7c6871718c2eec917610c0132",
+      "bytes": 8011
+    },
+    {
+      "file": "2026-10-26-v129280-c16-run3.json",
+      "sha256": "382201fe39ff06b2fc51e3e255caf65fa4963c969222983140f41811f6a6b0b2",
+      "bytes": 8013
+    }
+  ],
+  "results": [
+    {
+      "vocabulary_size": 32768,
+      "capacity_entries": 16,
+      "mode": "warm",
+      "cache_payload_bytes": 2097152,
+      "process_runs": 3,
+      "steps_per_process_per_arm": 48,
+      "hits_per_cached_process": 44,
+      "misses_per_cached_process": 4,
+      "hit_fraction": 0.9166666666666666,
+      "baseline_mean_step_ns_median_across_processes": 13826805.145833334,
+      "cached_mean_step_ns_median_across_processes": 1176382.8333333333,
+      "paired_process_time_ratio_median": 11.425789432956208,
+      "paired_process_time_ratio_min": 10.638622194379515,
+      "paired_process_time_ratio_max": 11.753661099129152,
+      "paired_process_time_ratios": [
+        11.425789432956208,
+        11.753661099129152,
+        10.638622194379515
+      ]
+    },
+    {
+      "vocabulary_size": 32768,
+      "capacity_entries": 16,
+      "mode": "cold",
+      "cache_payload_bytes": 2097152,
+      "process_runs": 3,
+      "steps_per_process_per_arm": 48,
+      "hits_per_cached_process": 0,
+      "misses_per_cached_process": 48,
+      "hit_fraction": 0.0,
+      "baseline_mean_step_ns_median_across_processes": 13464581.0625,
+      "cached_mean_step_ns_median_across_processes": 13279720.5625,
+      "paired_process_time_ratio_median": 1.01392051128862,
+      "paired_process_time_ratio_min": 0.9998376743881223,
+      "paired_process_time_ratio_max": 1.01958897472724,
+      "paired_process_time_ratios": [
+        1.01958897472724,
+        1.01392051128862,
+        0.9998376743881223
+      ]
+    },
+    {
+      "vocabulary_size": 32768,
+      "capacity_entries": 16,
+      "mode": "mixed",
+      "cache_payload_bytes": 2097152,
+      "process_runs": 3,
+      "steps_per_process_per_arm": 48,
+      "hits_per_cached_process": 8,
+      "misses_per_cached_process": 40,
+      "hit_fraction": 0.16666666666666666,
+      "baseline_mean_step_ns_median_across_processes": 13220416.916666666,
+      "cached_mean_step_ns_median_across_processes": 10565208.229166666,
+      "paired_process_time_ratio_median": 1.2051231974744647,
+      "paired_process_time_ratio_min": 1.1905234771214823,
+      "paired_process_time_ratio_max": 1.2579827666077927,
+      "paired_process_time_ratios": [
+        1.2051231974744647,
+        1.2579827666077927,
+        1.1905234771214823
+      ]
+    },
+    {
+      "vocabulary_size": 32768,
+      "capacity_entries": 16,
+      "mode": "collision",
+      "cache_payload_bytes": 2097152,
+      "process_runs": 3,
+      "steps_per_process_per_arm": 48,
+      "hits_per_cached_process": 0,
+      "misses_per_cached_process": 48,
+      "hit_fraction": 0.0,
+      "baseline_mean_step_ns_median_across_processes": 12809281.4375,
+      "cached_mean_step_ns_median_across_processes": 12794253.041666666,
+      "paired_process_time_ratio_median": 0.9979567864141484,
+      "paired_process_time_ratio_min": 0.9788936304261331,
+      "paired_process_time_ratio_max": 1.0011746208070444,
+      "paired_process_time_ratios": [
+        0.9788936304261331,
+        1.0011746208070444,
+        0.9979567864141484
+      ]
+    },
+    {
+      "vocabulary_size": 32768,
+      "capacity_entries": 128,
+      "mode": "warm",
+      "cache_payload_bytes": 16777216,
+      "process_runs": 3,
+      "steps_per_process_per_arm": 48,
+      "hits_per_cached_process": 44,
+      "misses_per_cached_process": 4,
+      "hit_fraction": 0.9166666666666666,
+      "baseline_mean_step_ns_median_across_processes": 13480862.333333334,
+      "cached_mean_step_ns_median_across_processes": 1164351.8541666667,
+      "paired_process_time_ratio_median": 11.39677877654716,
+      "paired_process_time_ratio_min": 11.233237924737885,
+      "paired_process_time_ratio_max": 12.09157829127395,
+      "paired_process_time_ratios": [
+        12.09157829127395,
+        11.39677877654716,
+        11.233237924737885
+      ]
+    },
+    {
+      "vocabulary_size": 32768,
+      "capacity_entries": 128,
+      "mode": "cold",
+      "cache_payload_bytes": 16777216,
+      "process_runs": 3,
+      "steps_per_process_per_arm": 48,
+      "hits_per_cached_process": 0,
+      "misses_per_cached_process": 48,
+      "hit_fraction": 0.0,
+      "baseline_mean_step_ns_median_across_processes": 13102797.291666666,
+      "cached_mean_step_ns_median_across_processes": 13100408.145833334,
+      "paired_process_time_ratio_median": 0.9930323576702941,
+      "paired_process_time_ratio_min": 0.963327312674236,
+      "paired_process_time_ratio_max": 1.0271705192991856,
+      "paired_process_time_ratios": [
+        1.0271705192991856,
+        0.963327312674236,
+        0.9930323576702941
+      ]
+    },
+    {
+      "vocabulary_size": 32768,
+      "capacity_entries": 128,
+      "mode": "mixed",
+      "cache_payload_bytes": 16777216,
+      "process_runs": 3,
+      "steps_per_process_per_arm": 48,
+      "hits_per_cached_process": 28,
+      "misses_per_cached_process": 20,
+      "hit_fraction": 0.5833333333333334,
+      "baseline_mean_step_ns_median_across_processes": 13731812.708333334,
+      "cached_mean_step_ns_median_across_processes": 5686358.916666667,
+      "paired_process_time_ratio_median": 2.4148691473001316,
+      "paired_process_time_ratio_min": 2.3022669440475294,
+      "paired_process_time_ratio_max": 2.4714309834658947,
+      "paired_process_time_ratios": [
+        2.4714309834658947,
+        2.3022669440475294,
+        2.4148691473001316
+      ]
+    },
+    {
+      "vocabulary_size": 32768,
+      "capacity_entries": 128,
+      "mode": "collision",
+      "cache_payload_bytes": 16777216,
+      "process_runs": 3,
+      "steps_per_process_per_arm": 48,
+      "hits_per_cached_process": 0,
+      "misses_per_cached_process": 48,
+      "hit_fraction": 0.0,
+      "baseline_mean_step_ns_median_across_processes": 13267673.104166666,
+      "cached_mean_step_ns_median_across_processes": 12968984.1875,
+      "paired_process_time_ratio_median": 1.0230310186479026,
+      "paired_process_time_ratio_min": 1.0007770753684746,
+      "paired_process_time_ratio_max": 1.1382485289964372,
+      "paired_process_time_ratios": [
+        1.0007770753684746,
+        1.1382485289964372,
+        1.0230310186479026
+      ]
+    },
+    {
+      "vocabulary_size": 129280,
+      "capacity_entries": 16,
+      "mode": "warm",
+      "cache_payload_bytes": 8273920,
+      "process_runs": 3,
+      "steps_per_process_per_arm": 48,
+      "hits_per_cached_process": 44,
+      "misses_per_cached_process": 4,
+      "hit_fraction": 0.9166666666666666,
+      "baseline_mean_step_ns_median_across_processes": 53397353.458333336,
+      "cached_mean_step_ns_median_across_processes": 4476275.729166667,
+      "paired_process_time_ratio_median": 11.415301266419696,
+      "paired_process_time_ratio_min": 11.37935022487986,
+      "paired_process_time_ratio_max": 11.977395741455604,
+      "paired_process_time_ratios": [
+        11.37935022487986,
+        11.977395741455604,
+        11.415301266419696
+      ]
+    },
+    {
+      "vocabulary_size": 129280,
+      "capacity_entries": 16,
+      "mode": "cold",
+      "cache_payload_bytes": 8273920,
+      "process_runs": 3,
+      "steps_per_process_per_arm": 48,
+      "hits_per_cached_process": 0,
+      "misses_per_cached_process": 48,
+      "hit_fraction": 0.0,
+      "baseline_mean_step_ns_median_across_processes": 53743525.666666664,
+      "cached_mean_step_ns_median_across_processes": 52636879.416666664,
+      "paired_process_time_ratio_median": 1.0085054403697185,
+      "paired_process_time_ratio_min": 0.9864077812534584,
+      "paired_process_time_ratio_max": 1.0469389069913242,
+      "paired_process_time_ratios": [
+        1.0085054403697185,
+        1.0469389069913242,
+        0.9864077812534584
+      ]
+    },
+    {
+      "vocabulary_size": 129280,
+      "capacity_entries": 16,
+      "mode": "mixed",
+      "cache_payload_bytes": 8273920,
+      "process_runs": 3,
+      "steps_per_process_per_arm": 48,
+      "hits_per_cached_process": 8,
+      "misses_per_cached_process": 40,
+      "hit_fraction": 0.16666666666666666,
+      "baseline_mean_step_ns_median_across_processes": 53471680.354166664,
+      "cached_mean_step_ns_median_across_processes": 43412812.604166664,
+      "paired_process_time_ratio_median": 1.2317027427297942,
+      "paired_process_time_ratio_min": 1.226686517208248,
+      "paired_process_time_ratio_max": 1.2777213095286364,
+      "paired_process_time_ratios": [
+        1.2777213095286364,
+        1.2317027427297942,
+        1.226686517208248
+      ]
+    },
+    {
+      "vocabulary_size": 129280,
+      "capacity_entries": 16,
+      "mode": "collision",
+      "cache_payload_bytes": 8273920,
+      "process_runs": 3,
+      "steps_per_process_per_arm": 48,
+      "hits_per_cached_process": 0,
+      "misses_per_cached_process": 48,
+      "hit_fraction": 0.0,
+      "baseline_mean_step_ns_median_across_processes": 52485063.604166664,
+      "cached_mean_step_ns_median_across_processes": 51731767.958333336,
+      "paired_process_time_ratio_median": 1.0145615677863564,
+      "paired_process_time_ratio_min": 0.9837274192667818,
+      "paired_process_time_ratio_max": 1.0402464639334157,
+      "paired_process_time_ratios": [
+        0.9837274192667818,
+        1.0145615677863564,
+        1.0402464639334157
+      ]
+    }
+  ],
+  "interpretation": "Measured CPU operator behavior for these synthetic traces only; no GPU, model or other-runtime performance claim."
+}

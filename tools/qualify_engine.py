@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Qualify the opt-in HIP engine adapter on one real device, then measure it.
+"""Qualify an external HIP application implementing the adapter receipt contract.
 
 Runs the same local engine executable with its original head, the uncached
 adapter, and a cached adapter. This is the batch application's fixed-window,
-greedy, single-node route. It never contacts a server or downloads model assets.
+greedy, single-node route. The executable and adapter are supplied separately;
+this library does not include an inference engine or an engine patch. This tool
+never contacts a server or downloads model assets. See docs/integration.md.
 """
 
 import argparse
@@ -175,7 +177,7 @@ def read_receipts(path, config, prompts, variant, qualification):
             concurrency = validate_receipt(receipt, config, prompts, variant, qualification)
             require(concurrency not in receipts, "duplicate receipt for a concurrency")
             receipts[concurrency] = receipt
-    require(set(receipts) == set(config["concurrency"]), "missing engine receipts; use the adapter-enabled patched application")
+    require(set(receipts) == set(config["concurrency"]), "missing engine receipts; use an external application implementing the required adapter/receipt contract")
     return receipts
 
 
@@ -187,6 +189,7 @@ def read_model_test_receipt(path):
                 receipt = load_payload(line[len(MODEL_TEST_PREFIX):])
                 fields(receipt, {"schema_version": 1, "backend": "hip",
                                  "adapter_compiled": True, "real_weights": True,
+                                 "fixture": "real_weights_synthetic_hidden",
                                  "draft_outputs_bitwise_equal": True, "failures": 0})
                 receipts.append(receipt)
     require(len(receipts) == 1,

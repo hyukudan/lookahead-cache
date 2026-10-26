@@ -1,0 +1,213 @@
+{
+  "schema_version": 1,
+  "project": "StrixLookahead",
+  "version": "0.4.1",
+  "checked_at_utc": "2026-10-26T08:31:07.003292+00:00",
+  "scope": "Standalone optimization library, packaging and documented CPU example",
+  "source_distribution": {
+    "inference_engine_included": false,
+    "engine_patch_included": false,
+    "model_weights_included": false,
+    "standalone_root_build": true
+  },
+  "qualification": {
+    "artifact_sha256": {
+      "build-cpu/installed-consumer/build/sl_installed_consumer": "19c402dafe02b84e240c983a7a7def1d45a665ca47d583ccbebe65b124d97f70",
+      "build-cpu/libstrix_lookahead.a": "1a3920ff40ff5a99f550624795694d4c4fbf50c31766e8425fb1bd993619acb9",
+      "build-cpu/sl_c_api_smoke": "35747241866870961323e58693c8603c94ca6159fda1fc38a17cce8f3ce33356",
+      "build-cpu/sl_cache_test": "2f1f8edc9b6749b584f2a6797321fb3cfa078dd20b9c702997b326baa7670735",
+      "build-cpu/sl_pair_example": "879e9ec55564306e145dbb79f6f91c9b3bb0380dabfbda60873b7aa1643c39d4",
+      "build-cpu/sl_pair_test": "855d196f949d7110d8c48373dc14c9724b4b72c9d13286a0b3aa717fb5c4a6cd",
+      "build-cpu/sl_selection_test": "9decc2bdd66a2e4f8f67ef3f80113731b2928406d5afb96b799aaba95f2a22ac",
+      "build-cuda/libstrix_lookahead_cuda.a": "6678fb385165d453f5fd04eb754174d02474b8078d834ace4924078499b18f0f",
+      "build-cuda/sl_cuda_test": "eb02d6e0f06e44106f4ba851243ee0e2ed0e8e3ea1b07128a95e7c975c4712a1",
+      "build-hip/libstrix_lookahead_hip.a": "5b7b16c4d8b8c1b8d2bbeff36a9b4355c1de7da61126f90f9beb020ce18f3f92",
+      "build-hip/sl_hip_test": "d26a977e82a9a7e492f7291bdb2923294e69614b36e8eb0ae5c9713db69ced39",
+      "build-source-consumer/sl_installed_consumer": "19c402dafe02b84e240c983a7a7def1d45a665ca47d583ccbebe65b124d97f70"
+    },
+    "cmake_version": "4.4.4",
+    "cpu": {
+      "build_exit": 0,
+      "compiler": "GNU 13.3.0",
+      "configuration": "Release",
+      "configure_exit": 0,
+      "ctest_exit": 0,
+      "ctest_log": "build-cpu/Testing/Temporary/LastTest.log",
+      "ctest_passed": 7,
+      "ctest_total": 7,
+      "make_examples_exit": 0,
+      "pair_example_exit": 0,
+      "pair_example_observation": {
+        "cached_hits": 2,
+        "cached_misses": 2,
+        "selection_and_bias_equal_bits": true,
+        "steps": 4
+      },
+      "test_names": [
+        "lookahead.cache_contract",
+        "lookahead.pair_contract",
+        "lookahead.selection_contract",
+        "lookahead.c_abi_smoke",
+        "lookahead.evidence_tools_contract",
+        "lookahead.engine_qualification_contract",
+        "lookahead.predecessor_trace_contract"
+      ]
+    },
+    "cuda": {
+      "architectures": [
+        86,
+        89,
+        120
+      ],
+      "benchmarks_run": 0,
+      "build_exit": 0,
+      "compiler": "NVIDIA CUDA 13.4.92",
+      "configure_exit": 0,
+      "host_compiler": "GNU 13.3.0",
+      "native_execution": "not_run_no_gpu",
+      "targets_built": [
+        "strix_lookahead",
+        "strix_lookahead_cuda",
+        "sl_cuda_test"
+      ]
+    },
+    "hip": {
+      "architecture": "gfx1151",
+      "benchmarks_run": 0,
+      "build_exit": 0,
+      "compiler": "Clang 24.0.0",
+      "configure_exit": 0,
+      "native_execution": "not_run_no_gpu",
+      "targets_built": [
+        "strix_lookahead",
+        "strix_lookahead_hip",
+        "sl_hip_test"
+      ]
+    },
+    "install": {
+      "configure_build_exit": 0,
+      "consumer_run_exit": 0,
+      "installed_license_matches": {
+        "LICENSE": true,
+        "NOTICE": true
+      },
+      "required_component": "cache",
+      "required_package_version": "0.4.1"
+    },
+    "numerical_runtime_sources_changed": false,
+    "source_embedding": {
+      "build_exit": 0,
+      "configure_exit": 0,
+      "consumer_run_exit": 0,
+      "creates_global_BUILD_TESTING": false,
+      "defaults_off": {
+        "SL_BUILD_EXAMPLES": true,
+        "SL_BUILD_TESTS": true,
+        "SL_ENABLE_INSTALL": true
+      }
+    },
+    "source_files_sha256": {
+      "CMakeLists.txt": "b23a000e8a8c31a4679391082df62d7608552d66220921393254ca97b3a7f334",
+      "Makefile": "15020fdf0b44bdba764fb8ee8c0d4ab0ba0c687fadf3560e988deb48a9540f6b",
+      "cmake/StrixLookaheadConfig.cmake.in": "142a965fa85b074a2076526032f7bc0da2af376f85781a2c04b59eecbd10a725",
+      "examples/cache_example.cpp": "6d1d3a45ee0b3c1147d09bc5ad0da741fb9746a216a281d1639fed54952b6032",
+      "examples/pair_example.cpp": "186befa9c2793f10d20a8c9750a47bfd3f997a4542f631a21390577fed5105b9",
+      "include/strix_lookahead/cache.h": "4018a29ed9258a1bef8be00671ff0c893badeb7dfeb8e6408a661b1089207777",
+      "include/strix_lookahead/device.h": "1994733a6e69953f33260a943ce20c5e5ddf934cc8cffad2255daaf044196749",
+      "include/strix_lookahead/pair.h": "472bd40d300767ba543216e5533e961333068094dbe4e22279bf89ac3079edfb",
+      "include/strix_lookahead/selection.h": "4fcdac336d7aeafe4ea88bcc60ee60da9063e87913155d7a33e51bbb578e7f8c",
+      "src/cache.cpp": "0b904202615b440529bca0fff393eb1855f42002e21d30e2cb562e365770ef68",
+      "src/device_cuda.cu": "9a237fd1d0acaddceefb41e66312607323efce2fac6342e45b6a52922f0ff4ae",
+      "src/device_hip.hip": "65047fcd52c7292456e881b13dbb10f96cffc63ca786e7ae60528ac846f2401d",
+      "src/device_kernels.hpp": "f85ca7a6bde58365ad3122886801261ec20624730030e01c9471e7b8df347ca1",
+      "src/device_runtime.hpp": "2c439c3b4000308ad5cc4d28b0086f3c4ed786bd90bf5d354d7bee4fc07e3036",
+      "src/pair.cpp": "438050de7121b00808dbc399daabee625db60c6bc911759e753964b4e3d8c410",
+      "src/selection.cpp": "7c1f5573e2bf6e1a80e3f996d054a5435a2a78b00efe61533693c59212759fe4",
+      "support/device_runtime.hpp": "2b64946ff777a1f1f0d8f12fcbb2f816e85104bcb96472372628c0d080273886",
+      "tests/c_api_smoke.c": "0759bc4c00f2ddb39b683730ef631abf3441dbd1c325cf95d3a7505f110ed729",
+      "tests/cache_test.cpp": "8166259f725549353d7ba7c236a41acf3c489eb8781fdcc214182e29865ee882",
+      "tests/consumer/CMakeLists.txt": "fbe140499d1ff392c969504d8daa3add69a3f3e95a10df8690c1282e6b6a397c",
+      "tests/device_test.cpp": "4472889d63dd83324ce542625eb1dc79f709ba25f2b4a4cd7d7e0584ad683353",
+      "tests/engine_qualification_test.py": "44ec7ace8586f4d1bdf59d2509179fc0ad59f34b62392c7228f6aefc61dd967f",
+      "tests/evidence_tools_test.py": "2068fb1fe067c9329f55b1e92a7a3408d48564a342c01119d4e417d1e6b57b23",
+      "tests/pair_test.cpp": "bbd94ac7dd2642127a1e786fe11621c56032be9ad520841a80dd5e5f4b5f1056",
+      "tests/predecessor_trace_test.py": "8f759ba85dd98f96fe407f712123361f5ea71098826822fd6ad254a654b8d5a3",
+      "tests/selection_test.cpp": "b3a443b1ebc8833e71677220cd1f9bd89e0eb09a44ecd085ce07cce7b6439dab"
+    },
+    "source_sha256": "95b1f6eced068d507bd1146b6614f9a153d06992445d8ba7b5d9bb246d00d14c",
+    "version": "0.4.1"
+  },
+  "preserved_implementation": {
+    "baseline_repository": "https://github.com/hyukudan/strix-lookahead",
+    "baseline_commit": "51f2132a3b4d8ff01b54a5726f92499ea04033a3",
+    "files_compared": 12,
+    "byte_identical": true,
+    "files": [
+      {
+        "path": "src/cache.cpp",
+        "sha256": "0b904202615b440529bca0fff393eb1855f42002e21d30e2cb562e365770ef68"
+      },
+      {
+        "path": "src/device_cuda.cu",
+        "sha256": "9a237fd1d0acaddceefb41e66312607323efce2fac6342e45b6a52922f0ff4ae"
+      },
+      {
+        "path": "src/device_hip.hip",
+        "sha256": "65047fcd52c7292456e881b13dbb10f96cffc63ca786e7ae60528ac846f2401d"
+      },
+      {
+        "path": "src/device_kernels.hpp",
+        "sha256": "f85ca7a6bde58365ad3122886801261ec20624730030e01c9471e7b8df347ca1"
+      },
+      {
+        "path": "src/device_runtime.hpp",
+        "sha256": "2c439c3b4000308ad5cc4d28b0086f3c4ed786bd90bf5d354d7bee4fc07e3036"
+      },
+      {
+        "path": "src/pair.cpp",
+        "sha256": "438050de7121b00808dbc399daabee625db60c6bc911759e753964b4e3d8c410"
+      },
+      {
+        "path": "src/selection.cpp",
+        "sha256": "7c1f5573e2bf6e1a80e3f996d054a5435a2a78b00efe61533693c59212759fe4"
+      },
+      {
+        "path": "include/strix_lookahead/cache.h",
+        "sha256": "4018a29ed9258a1bef8be00671ff0c893badeb7dfeb8e6408a661b1089207777"
+      },
+      {
+        "path": "include/strix_lookahead/device.h",
+        "sha256": "1994733a6e69953f33260a943ce20c5e5ddf934cc8cffad2255daaf044196749"
+      },
+      {
+        "path": "include/strix_lookahead/pair.h",
+        "sha256": "472bd40d300767ba543216e5533e961333068094dbe4e22279bf89ac3079edfb"
+      },
+      {
+        "path": "include/strix_lookahead/selection.h",
+        "sha256": "4fcdac336d7aeafe4ea88bcc60ee60da9063e87913155d7a33e51bbb578e7f8c"
+      },
+      {
+        "path": "support/device_runtime.hpp",
+        "sha256": "2b64946ff777a1f1f0d8f12fcbb2f816e85104bcb96472372628c0d080273886"
+      }
+    ]
+  },
+  "tool_source_sha256": {
+    "tools/analyze_predecessor_trace.py": "6eef69e7e9fabb9b173343c2bc69dc539e2c3292d9dcfa32b831a1e6c79224f1",
+    "tools/evidence.py": "11fff65d2b377fe7f679735d7e686ab26b244b3654ad40e7970b7efbd69afdda",
+    "tools/qualify_device.py": "a48a9b2a59c161545d258bfe4f1fe88a402ff15e7f8c2a0e1e3b0ff8313b1f5a",
+    "tools/qualify_engine.py": "747b9acd4dbae44485ba2f4ab7fe311af228e057a7d9e411f2b6389a1d3934af",
+    "tools/run_cpu_benchmark.py": "54f3f7d62ce42d9b2ad7e8d434afd9873c5927c8498d06fe30c4995ff9d60f68"
+  },
+  "native_gpu_correctness": "not_run_no_gpu",
+  "real_model_correctness": "not_run",
+  "real_model_speedup": null,
+  "source_binary_binding": "recorded_hashes_not_a_build_attestation",
+  "limits": [
+    "Host fixtures and contract tests do not establish full-model correctness or throughput.",
+    "HIP and CUDA results are compilation results only.",
+    "The optional external qualification driver requires separately supplied compatible executables and model assets.",
+    "No inference engine is part of this source distribution."
+  ]
+}

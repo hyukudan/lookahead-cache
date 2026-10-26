@@ -1,0 +1,15 @@
+StrixLookahead
+
+This distribution contains the standalone StrixLookahead optimization library,
+its public C API, component examples, tests and qualification tools. The project
+source is licensed under the Apache License, Version 2.0; see LICENSE.
+
+The CPU, HIP and CUDA pair operators implement the rank-256 numerical contract
+documented in include/strix_lookahead/pair.h. The library does not contain an
+inference engine, pretrained model weights or a tokenizer. Model assets and any
+external engine used by an application retain their separate licenses and notices.
+
+tools/qualify_engine.py is an optional test driver for an external executable with
+a specific command-line and receipt contract. Its presence does not distribute
+that executable or grant rights to external code or assets. See docs/integration.md
+and PROVENANCE.json for the scope of this package.

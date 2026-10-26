@@ -1,139 +1,115 @@
-# Strix Lookahead
+# StrixLookahead
 
-**AMD-first components for speculative LLM inference, designed around Strix Halo.**
+**A standalone library of reusable lookahead optimizations for LLM inference.**
 
-[Español](README.es.md)
+[English](README.md) · [Español](README.es.md) · Version **0.4.1**
 
-Version 0.3 adds a private, opt-in HIP engine adapter and a reproducible
-three-variant qualification runner to the static rank-256 transition head,
-cached execution path and experimental certified selector. The first hardware target is Strix Halo
-(`gfx1151`, HIP); a CUDA implementation shares the same numerical and ownership
-contract. The inference engine retains target verification, model state and sampling.
+StrixLookahead supplies a host cache, a rank-256 pair operator for CPU/HIP/CUDA,
+an experimental CPU certified selector, and their tests and measurement tools.
+The main target is AMD Strix Halo; the CUDA backend provides a separate path for
+RTX integration. Applications link the library into their own inference engine.
+Model loading, execution, verification and sampling belong to that application.
 
-## Implemented components
+The central optimization reuses a predecessor-dependent FP32 bias vector when
+the predecessor repeats under the same weights, arithmetic and ordered
+vocabulary. Current base logits are still evaluated on every step. A hit can
+avoid recomputing the rank-256 dot products; the benefit depends on reuse, cache
+collisions, vocabulary changes and the rest of the application.
 
-| Component | Implementation | Evidence |
+The [method note](docs/method.md) explains the reference papers, the implemented
+changes and the open research questions. [Recorded results](docs/results.md)
+describe the measurements and their limits.
+
+## Components
+
+| Component | Purpose | Public API |
 | --- | --- | --- |
-| Generic FP32 vector cache | C API, bounded storage, independent leases, deterministic LRU | CPU lifecycle tests |
-| Rank-256 pair head | Binary16 weights, FP32 arithmetic, ordered candidate vocabulary, direct-mapped bias cache | CPU equivalence tests and synthetic component measurements |
-| HIP pair head | Device-resident cache, coalesced hits, two kernels per step | Compiled for `gfx1151`; native execution pending |
-| CUDA pair head | Same contract and two-kernel structure | Compiled for `sm_86`, `sm_89`, `sm_120`; native execution pending |
-| Certified sparse selection | Immutable validated inputs, exact upper-bound and tie certificate, full-scan fallback | CPU exhaustive and randomized checks |
-| Private HIP engine adapter | Pinned patch, per-request vocabulary bindings, device token chaining and cache receipts | Engine application and host/native test targets compiled; host test passed, GPU/model qualification pending |
-| Engine qualification runner | Original head vs uncached adapter vs cached adapter, native correctness gates and exact token comparison | Runner tests use mocks; no real-model speed result yet |
+| Host cache | Caller-produced FP32 vectors, read/write leases and LRU eviction | [`cache.h`](include/strix_lookahead/cache.h) |
+| CPU pair reference | FP16 pair weights, prescribed FP32 arithmetic, greedy selection and a direct-map bias cache | [`pair.h`](include/strix_lookahead/pair.h) |
+| HIP / CUDA pair operators | Stream-bound asynchronous implementations of the pair contract, including capacity-zero comparison | [`device.h`](include/strix_lookahead/device.h) |
+| Experimental CPU selector | Prove a candidate winner from conservative bounds, with full-scan fallback | [`selection.h`](include/strix_lookahead/selection.h) |
+| Examples and tools | API usage, synthetic component benchmarks, correctness gates and trace replay | [`examples`](examples), [`tools`](tools) |
 
-The project is a technical preview. The device kernels are real implementations;
-there is no CPU fallback presented as GPU execution. Synthetic CPU measurements
-compare the same reference arithmetic with and without caching. They do not measure
-full-model inference or establish an advantage over a trained drafting system.
+The library has a C ABI and a C++20 implementation. The generic host cache and
+the pair operator have different eviction policies; choose the API that matches
+the data you want to reuse. The selector's snapshot preparation is O(V), so its
+O(K) certificate alone is not an end-to-end speedup.
 
-## Private engine integration in 0.3
+## Build and try the CPU examples
 
-The engine source is public; its integration changes are distributed **only in
-this private repository** as a patch against commit
-`683e69e91eb2203addf016e2cfdead8217e65fa2`. The installer checks the exact commit,
-patch digest and affected file contents before making local changes. It never
-commits or pushes to the public engine repository.
-
-The adapter uses the engine's existing FP16 pair weights, split base logits and
-confidence inputs. Each request owns its cache binding; vocabulary changes rebuild
-that binding and invalidate old entries. Device statuses and cache hits travel in
-the existing draft result readback. The engine continues to own verification,
-commit/rollback and model state.
-
-The first qualification route is **one HIP device, greedy decoding and fixed
-verification windows**. It measures the existing head, capacity zero, and a positive
-cache capacity in the same binary. CUDA pair kernels remain available as a library;
-the engine adapter currently uses HIP. Two-node execution, adaptive controller
-policies and sampled decoding require separate qualification.
-
-See the [engine integration guide](docs/engine-integration.md) for installation,
-patch application, compilation, model qualification, trace analysis and rollback.
-
-## Review changes in 0.2.1
-
-The [technical review](docs/review-0.2.1.md) fixes independent SSE rounding-mode
-validation, removes redundant CPU butterfly work, reduces GPU winner-reduction
-shared storage and barriers, accepts provably winning certificate ties, and
-hardens measurement validation and installed-package checks. The C ABI, cache
-mapping and two-kernel execution contract remain compatible.
-
-## Build and test on CPU
-
-Requires C++20, a C11 compiler, and CMake 3.21 or newer. The host library has no
-runtime dependencies beyond the standard library.
+Clone this repository with an account that has access:
 
 ```sh
+git clone git@github.com:hyukudan/strix-lookahead.git
+cd strix-lookahead
+
 cmake -S . -B build-cpu -DCMAKE_BUILD_TYPE=Release
 cmake --build build-cpu --parallel
 ctest --test-dir build-cpu --output-on-failure
-./build-cpu/sl_pair_benchmark --vocab 8192 --steps 24 --repeats 3 --capacity 16
+./build-cpu/sl_cache_example
+./build-cpu/sl_pair_example
 ```
 
-The Makefile also supports `make test`, `make example`, and `make benchmark`.
-Floating-point contraction and fast-math optimizations are disabled deliberately
-to preserve the reference numerical profile.
+Use a C++20 compiler and CMake 3.21 or newer. Python 3.10+ enables the optional
+tool tests and evidence collectors. The examples use small synthetic arrays and
+require no model files. See [usage](docs/usage.md) for HIP `gfx1151`, CUDA,
+installation and build options.
 
-When Python 3 is available, CTest also runs evidence, engine-runner and trace
-regressions; patch-installer tests additionally require Git. Python is not a
-runtime dependency of the library.
+## Use it in an application
 
-## Build for Strix Halo
-
-Use an installed AMD HIP SDK with `gfx1151` support. Add its installation prefix
-to `CMAKE_PREFIX_PATH` if it is outside the compiler's normal search path.
+Install a selected build, then link its exported CMake target:
 
 ```sh
-cmake -S . -B build-hip -DCMAKE_BUILD_TYPE=Release \
-  -DSL_ENABLE_HIP=ON -DCMAKE_HIP_ARCHITECTURES=gfx1151
-cmake --build build-hip --parallel
-ctest --test-dir build-hip --output-on-failure
-./build-hip/sl_hip_benchmark --vocab 129280 --steps 24 --repeats 5 --capacity 16 --graph 1
+cmake --install build-cpu --prefix "$PWD/local-install"
 ```
 
-The current source uses `hipStreamGetDevice`; use a HIP SDK that provides that API.
-The recorded build uses ROCm 10.1.0. CMake's HIP language requires AMD's Clang
-compiler, rather than setting `CMAKE_HIP_COMPILER` to the `hipcc` wrapper.
+```cmake
+find_package(StrixLookahead 0.4.1 CONFIG REQUIRED COMPONENTS cache)
+target_link_libraries(my_application PRIVATE StrixLookahead::cache)
+```
 
-## Build for CUDA
+Pass the installation prefix in `CMAKE_PREFIX_PATH` when configuring the
+application. Builds with GPU support also export `StrixLookahead::hip` or
+`StrixLookahead::cuda`. Source integration through `add_subdirectory` is supported.
+The [integration guide](docs/integration.md) covers both CMake routes and the
+numerical, vocabulary, lifetime, stream and result-handling contracts.
 
-CUDA Toolkit 12.8 or newer is required. The default architectures are 86, 89 and
-120; specify the architecture of the target RTX GPU when building for one machine.
+## Measure the component
+
+After building the CPU target:
 
 ```sh
-cmake -S . -B build-cuda -DCMAKE_BUILD_TYPE=Release \
-  -DSL_ENABLE_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=120
-cmake --build build-cuda --parallel
-ctest --test-dir build-cuda --output-on-failure
-./build-cuda/sl_cuda_benchmark --vocab 129280 --steps 24 --repeats 5 --capacity 16 --graph 1
+python3 tools/run_cpu_benchmark.py \
+  --executable build-cpu/sl_pair_benchmark \
+  --output results/cpu-pair.json --pin -- \
+  --vocab 8192 --steps 24 --repeats 5 --capacity 16
 ```
 
-Device tests and benchmarks exit with code 77 when a device or compatible driver
-is unavailable. A skip is not a successful GPU correctness result.
+Choose a new output filename for each run. `--pin` selects one permitted CPU on
+Linux; omit it where affinity is unavailable. This compares the cached operator
+with the same CPU reference at capacity zero using synthetic data. It measures
+neither full-model inference nor a different inference engine.
 
-## Integration
+For GPU builds, `tools/qualify_device.py` runs native correctness before timing.
+See [benchmarks and evidence](docs/benchmarks.md) for the commands, measurement
+boundaries and failure semantics. The optional `qualify_engine.py` requires an
+external application implementing a specific CLI and receipt contract; that
+application and its adapter are not part of this library.
 
-CMake targets are `StrixLookahead::cache`, `StrixLookahead::hip`, and
-`StrixLookahead::cuda`. Backend targets exist only when explicitly enabled.
+## Validation and scope
 
-Public C headers:
+The [release validation record](docs/validation.json) distinguishes host checks,
+compilation and native device execution. For this release, the seven host CTests,
+the pair example and package consumers passed. HIP compilation for `gfx1151` and
+CUDA compilation for architectures `86`, `89`, `120` completed. Native GPU
+tests/benchmarks and model runs have not been performed for this release.
 
-- [`cache.h`](include/strix_lookahead/cache.h): generic caller-filled vector cache.
-- [`pair.h`](include/strix_lookahead/pair.h): numerical reference and model configuration.
-- [`device.h`](include/strix_lookahead/device.h): asynchronous HIP/CUDA execution.
-- [`selection.h`](include/strix_lookahead/selection.h): certified selector and fallback.
+GPU/model equivalence and performance must be established on the intended
+hardware and application; no model speedup or superiority over another system
+is claimed here. Inspect test skips as well as failures: an unavailable GPU is
+not a passed device qualification.
 
-Weights and the ordered candidate mapping remain immutable for each pair instance.
-Capacity zero selects the uncached comparison path. Device instances own their
-workspace and belong to one stream; enqueue performs no allocation, host readback,
-or synchronization. The API supports split base-logit buffers and produces the
-predecessor embedding on hits for the engine's confidence calculation.
-
-The certificate is a separate CPU component. Its preparation scans and snapshots
-the inputs; those costs must be counted before claiming a benefit from its O(K)
-evaluation. A learned contextual corrector is a separate research milestone.
-
-See [architecture](docs/architecture.md), [library integration](docs/integration.md),
-[private engine integration](docs/engine-integration.md),
-[benchmark interpretation](docs/benchmarks.md), [validation](docs/validation.md),
-and [roadmap](docs/roadmap.md).
+- [Build and API examples](docs/usage.md)
+- [Application integration and correctness contract](docs/integration.md)
+- [Benchmark methodology and optional tools](docs/benchmarks.md)
+- [License](LICENSE), [notice](NOTICE), [provenance](PROVENANCE.json)

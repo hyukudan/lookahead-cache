@@ -1,0 +1,154 @@
+{
+  "schema_version": 2,
+  "started_at_utc": "2026-10-26T08:34:27.223053+00:00",
+  "finished_at_utc": "2026-10-26T08:34:31.662238+00:00",
+  "hardware": {
+    "cpu_model": "AMD EPYC 9V74 80-Core Processor",
+    "machine": "x86_64",
+    "system": "Linux",
+    "pinned_cpu": 0
+  },
+  "command": [
+    "sl_pair_benchmark",
+    "--vocab",
+    "32768",
+    "--steps",
+    "12",
+    "--repeats",
+    "4",
+    "--capacity",
+    "16"
+  ],
+  "library_compile_flags": "-O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -ffp-contract=off -fno-fast-math",
+  "library_compile_flags_origin": "Adjacent CMake flags.make when available; not a binary attestation.",
+  "provenance": {
+    "source_sha256": {
+      "src/pair.cpp": "438050de7121b00808dbc399daabee625db60c6bc911759e753964b4e3d8c410",
+      "src/cache.cpp": "0b904202615b440529bca0fff393eb1855f42002e21d30e2cb562e365770ef68",
+      "include/strix_lookahead/pair.h": "472bd40d300767ba543216e5533e961333068094dbe4e22279bf89ac3079edfb",
+      "include/strix_lookahead/cache.h": "4018a29ed9258a1bef8be00671ff0c893badeb7dfeb8e6408a661b1089207777",
+      "examples/pair_benchmark.cpp": "5970f2d583b16d8bebca1b456fee83f460abf45d28ded7bc857ed815a465c00c",
+      "CMakeLists.txt": "b23a000e8a8c31a4679391082df62d7608552d66220921393254ca97b3a7f334",
+      "Makefile": "15020fdf0b44bdba764fb8ee8c0d4ab0ba0c687fadf3560e988deb48a9540f6b",
+      "tools/run_cpu_benchmark.py": "54f3f7d62ce42d9b2ad7e8d434afd9873c5927c8498d06fe30c4995ff9d60f68",
+      "tools/evidence.py": "11fff65d2b377fe7f679735d7e686ab26b244b3654ad40e7970b7efbd69afdda"
+    },
+    "executable_sha256": {
+      "sl_pair_benchmark": "32470859b87f7f8e417549e4e47eab4b0079ab46927f16c16c6bb8937f627912"
+    },
+    "build_source_binding": "not_attested",
+    "interpretation": "Source digests describe the working tree at run time; executable digests identify the binaries run. No source-to-binary build attestation is claimed.",
+    "source_sha256_after": {
+      "src/pair.cpp": "438050de7121b00808dbc399daabee625db60c6bc911759e753964b4e3d8c410",
+      "src/cache.cpp": "0b904202615b440529bca0fff393eb1855f42002e21d30e2cb562e365770ef68",
+      "include/strix_lookahead/pair.h": "472bd40d300767ba543216e5533e961333068094dbe4e22279bf89ac3079edfb",
+      "include/strix_lookahead/cache.h": "4018a29ed9258a1bef8be00671ff0c893badeb7dfeb8e6408a661b1089207777",
+      "examples/pair_benchmark.cpp": "5970f2d583b16d8bebca1b456fee83f460abf45d28ded7bc857ed815a465c00c",
+      "CMakeLists.txt": "b23a000e8a8c31a4679391082df62d7608552d66220921393254ca97b3a7f334",
+      "Makefile": "15020fdf0b44bdba764fb8ee8c0d4ab0ba0c687fadf3560e988deb48a9540f6b",
+      "tools/run_cpu_benchmark.py": "54f3f7d62ce42d9b2ad7e8d434afd9873c5927c8498d06fe30c4995ff9d60f68",
+      "tools/evidence.py": "11fff65d2b377fe7f679735d7e686ab26b244b3654ad40e7970b7efbd69afdda"
+    },
+    "executable_sha256_after": {
+      "sl_pair_benchmark": "32470859b87f7f8e417549e4e47eab4b0079ab46927f16c16c6bb8937f627912"
+    },
+    "unchanged_during_run": true
+  },
+  "status": "passed",
+  "collector_exit_code": 0,
+  "execution": {
+    "command": [
+      "sl_pair_benchmark",
+      "--vocab",
+      "32768",
+      "--steps",
+      "12",
+      "--repeats",
+      "4",
+      "--capacity",
+      "16"
+    ],
+    "exit_code": 0,
+    "stdout": "{\n  \"benchmark\": \"cpu-reference-pair-component\",\n  \"baseline\": \"same_cpu_reference_capacity_zero\",\n  \"optimized_engine_comparison\": false,\n  \"compiler_version\": \"13.3.0\",\n  \"synthetic_inputs\": true,\n  \"single_thread\": true,\n  \"device_measurement\": false,\n  \"end_to_end_inference\": false,\n  \"seed\": \"0x5168724c6f6f6b31\",\n  \"vocabulary_size\": 32768,\n  \"embedding_rows\": 32768,\n  \"rank\": 256,\n  \"capacity_entries\": 16,\n  \"steps_per_repeat\": 12,\n  \"repeats\": 4,\n  \"estimated_input_and_payload_bytes\": 37355520,\n  \"warm_includes_initial_miss\": true,\n  \"reset_between_repeats\": true,\n  \"alternating_run_order\": true,\n  \"quantile_method\": \"nearest_rank\",\n  \"all_outputs_equivalent\": true,\n  \"modes\": [\n    {\"mode\": \"warm\", \"hits\": 44, \"misses\": 4, \"baseline_total_ns\": 663686647, \"cached_total_ns\": 56466376, \"baseline_p50_step_ns\": 13548997, \"baseline_p95_step_ns\": 16137905, \"cached_p50_step_ns\": 55002, \"cached_p95_step_ns\": 13133892, \"component_speed_ratio\": 11.7536611, \"all_outputs_equivalent\": true},\n    {\"mode\": \"cold\", \"hits\": 0, \"misses\": 48, \"baseline_total_ns\": 646299891, \"cached_total_ns\": 637426587, \"baseline_p50_step_ns\": 13316864, \"baseline_p95_step_ns\": 15075821, \"cached_p50_step_ns\": 13320760, \"cached_p95_step_ns\": 14102418, \"component_speed_ratio\": 1.01392051, \"all_outputs_equivalent\": true},\n    {\"mode\": \"mixed\", \"hits\": 8, \"misses\": 40, \"baseline_total_ns\": 634580012, \"cached_total_ns\": 504442532, \"baseline_p50_step_ns\": 12635604, \"baseline_p95_step_ns\": 18081275, \"cached_p50_step_ns\": 12419313, \"cached_p95_step_ns\": 13247281, \"component_speed_ratio\": 1.25798277, \"all_outputs_equivalent\": true},\n    {\"mode\": \"collision\", \"hits\": 0, \"misses\": 48, \"baseline_total_ns\": 614845509, \"cached_total_ns\": 614124146, \"baseline_p50_step_ns\": 12805135, \"baseline_p95_step_ns\": 13540315, \"cached_p50_step_ns\": 12737024, \"cached_p95_step_ns\": 13333818, \"component_speed_ratio\": 1.00117462, \"all_outputs_equivalent\": true}\n  ]\n}\n",
+    "stderr": ""
+  },
+  "validation_errors": [],
+  "interpretation": "Synthetic CPU operator comparison against the same uncached reference; no LLM or GPU performance claim.",
+  "result": {
+    "benchmark": "cpu-reference-pair-component",
+    "baseline": "same_cpu_reference_capacity_zero",
+    "optimized_engine_comparison": false,
+    "compiler_version": "13.3.0",
+    "synthetic_inputs": true,
+    "single_thread": true,
+    "device_measurement": false,
+    "end_to_end_inference": false,
+    "seed": "0x5168724c6f6f6b31",
+    "vocabulary_size": 32768,
+    "embedding_rows": 32768,
+    "rank": 256,
+    "capacity_entries": 16,
+    "steps_per_repeat": 12,
+    "repeats": 4,
+    "estimated_input_and_payload_bytes": 37355520,
+    "warm_includes_initial_miss": true,
+    "reset_between_repeats": true,
+    "alternating_run_order": true,
+    "quantile_method": "nearest_rank",
+    "all_outputs_equivalent": true,
+    "modes": [
+      {
+        "mode": "warm",
+        "hits": 44,
+        "misses": 4,
+        "baseline_total_ns": 663686647,
+        "cached_total_ns": 56466376,
+        "baseline_p50_step_ns": 13548997,
+        "baseline_p95_step_ns": 16137905,
+        "cached_p50_step_ns": 55002,
+        "cached_p95_step_ns": 13133892,
+        "component_speed_ratio": 11.7536611,
+        "all_outputs_equivalent": true
+      },
+      {
+        "mode": "cold",
+        "hits": 0,
+        "misses": 48,
+        "baseline_total_ns": 646299891,
+        "cached_total_ns": 637426587,
+        "baseline_p50_step_ns": 13316864,
+        "baseline_p95_step_ns": 15075821,
+        "cached_p50_step_ns": 13320760,
+        "cached_p95_step_ns": 14102418,
+        "component_speed_ratio": 1.01392051,
+        "all_outputs_equivalent": true
+      },
+      {
+        "mode": "mixed",
+        "hits": 8,
+        "misses": 40,
+        "baseline_total_ns": 634580012,
+        "cached_total_ns": 504442532,
+        "baseline_p50_step_ns": 12635604,
+        "baseline_p95_step_ns": 18081275,
+        "cached_p50_step_ns": 12419313,
+        "cached_p95_step_ns": 13247281,
+        "component_speed_ratio": 1.25798277,
+        "all_outputs_equivalent": true
+      },
+      {
+        "mode": "collision",
+        "hits": 0,
+        "misses": 48,
+        "baseline_total_ns": 614845509,
+        "cached_total_ns": 614124146,
+        "baseline_p50_step_ns": 12805135,
+        "baseline_p95_step_ns": 13540315,
+        "cached_p50_step_ns": 12737024,
+        "cached_p95_step_ns": 13333818,
+        "component_speed_ratio": 1.00117462,
+        "all_outputs_equivalent": true
+      }
+    ]
+  }
+}

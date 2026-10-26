@@ -44,6 +44,9 @@ $(BUILD_DIR)/sl_c_api_smoke: $(BUILD_DIR)/c_api_smoke.o $(BUILD_DIR)/libstrix_lo
 $(BUILD_DIR)/sl_cache_example: examples/cache_example.cpp $(BUILD_DIR)/libstrix_lookahead.a
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $< $(BUILD_DIR)/libstrix_lookahead.a $(LDFLAGS) -o $@
 
+$(BUILD_DIR)/sl_pair_example: examples/pair_example.cpp $(BUILD_DIR)/libstrix_lookahead.a
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $< $(BUILD_DIR)/libstrix_lookahead.a $(LDFLAGS) -o $@
+
 test: $(BUILD_DIR)/sl_cache_test $(BUILD_DIR)/sl_pair_test $(BUILD_DIR)/sl_selection_test $(BUILD_DIR)/sl_c_api_smoke
 	$(BUILD_DIR)/sl_cache_test
 	$(BUILD_DIR)/sl_pair_test
@@ -54,10 +57,10 @@ test-tools:
 	python3 tests/evidence_tools_test.py
 	python3 tests/engine_qualification_test.py
 	python3 tests/predecessor_trace_test.py
-	python3 tests/engine_patch_test.py
 
-example: $(BUILD_DIR)/sl_cache_example
+example: $(BUILD_DIR)/sl_cache_example $(BUILD_DIR)/sl_pair_example
 	$(BUILD_DIR)/sl_cache_example
+	$(BUILD_DIR)/sl_pair_example
 
 $(BUILD_DIR)/sl_pair_benchmark: examples/pair_benchmark.cpp $(BUILD_DIR)/libstrix_lookahead.a
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $< $(BUILD_DIR)/libstrix_lookahead.a $(LDFLAGS) -o $@

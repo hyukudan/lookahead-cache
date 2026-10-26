@@ -1,130 +1,169 @@
-# Benchmark scope and results
+# Benchmarks and evidence
 
-## What is measured
+The [release validation record](validation.json) records which checks actually
+ran. A successful build, an unavailable native test, a synthetic benchmark and
+a real-model measurement establish different things. This repository's default
+benchmarks measure the pair component with synthetic inputs.
 
-The CPU executable compares the same rank-256 reference with capacity zero and
-with a direct-mapped FP32 bias cache. It uses generated binary16 weights and FP32
-base logits, alternates execution order, resets between repeats and verifies every
-selected global token, vocabulary row and score bit pattern. Allocation and input
-generation are outside the timing; the first miss of each CPU warm sequence is
-inside it.
+[Results](results.md) collects the actual measurements and their scope;
+[method](method.md) documents the source paper and the reasoning behind the
+optimization. The commands below describe how to reproduce component checks
+and gather additional evidence.
 
-This is a synthetic, single-thread component comparison. It does not run a model
-backbone, target verifier, tokenizer, model server, trained contextual corrector or
-an independently optimized inference engine.
+## CPU component
 
-## Historical CPU run, version 0.2
-
-This record describes the code at commit `7417c3f`, before the 0.2.1 review. Its
-source fingerprints are historical and are not fingerprints of the current tree.
-
-Hardware: AMD EPYC 9V74 host, one permitted CPU pinned. Build: GCC 13.3.0, Release
-`-O3`, strict FP32 operations. Shape: 129,280 candidates, rank 256, 16 cache slots,
-12 steps per repeat and three repeats. Each row below summarizes 36 steps.
-
-| Synthetic sequence | Cache hits | Mean uncached step | Mean cached step | Total-time ratio |
-| --- | ---: | ---: | ---: | ---: |
-| Repeated predecessor, initial miss included | 33 / 36 | 57.56 ms | 5.18 ms | 11.12x |
-| New predecessor each step | 0 / 36 | 56.25 ms | 55.03 ms | 1.02x |
-| Mixed repeated and new predecessors | 6 / 36 | 59.11 ms | 48.91 ms | 1.21x |
-| Deliberate direct-map collisions | 0 / 36 | 54.08 ms | 54.08 ms | 1.00x |
-
-Every output matched. The approximately two-percent cold difference is not evidence
-of a reliable improvement; no uncertainty interval was estimated. The high-reuse
-case demonstrates avoided arithmetic, but its 95th-percentile cached step still
-takes about 59.74 ms because misses remain expensive. These factors must not be
-reported as LLM tokens-per-second gains or Strix Halo measurements.
-
-Raw evidence and source fingerprints are in
-[`cpu-129280-2026-10-26.json`](../benchmarks/results/cpu-129280-2026-10-26.json).
-
-Reproduce and save a fresh record:
+Build the CPU targets as described in [usage](usage.md), then run:
 
 ```sh
 python3 tools/run_cpu_benchmark.py \
   --executable build-cpu/sl_pair_benchmark \
-  --output benchmarks/results/my-cpu-run.json --pin -- \
-  --vocab 129280 --steps 12 --repeats 3 --capacity 16
+  --output results/cpu-pair.json --pin -- \
+  --vocab 8192 --steps 24 --repeats 5 --capacity 16
 ```
 
-The wrapper refuses to overwrite an earlier record. Remove `--pin` on platforms
-without Linux CPU affinity. It uses only the Python standard library.
+The output must be new. `--pin` uses the first CPU permitted to this process on
+Linux. Run without competing workloads and record the CPU/power configuration
+when comparing machines or revisions.
 
-## Review measurements, version 0.2.1
+The single-thread benchmark compares capacity zero with a positive capacity
+using the same reference, weights, mapping and base-logit sequence. It alternates
+which arm runs first and checks global token, candidate row and score bits at
+each step. Four predecessor patterns exercise cold, warm, mixed and collision
+behavior. Each repeat resets the caches; CPU `warm` includes its first miss.
 
-The [paired revision comparison](../benchmarks/results/cpu-review-2026-10-26.json)
-uses the same benchmark source and compiler flags for the old and new CPU
-implementation. Three before/after pairs alternate execution order, with one CPU
-pinned, 32,768 candidates, 12 steps per repeat and three repeats per mode.
-Aggregating all four synthetic modes gives an old-time/new-time ratio of 1.062x
-for the uncached path and 1.100x for the cached path. Individual ratios range from
-0.989x to 1.142x; no uncertainty interval was estimated. These observations support
-a modest component improvement in this environment, not a universal speed factor.
+Reported times cover each synchronous pair step, including cache lookup,
+possible bias computation and greedy selection. Allocation, input generation
+and reset occur outside those samples. The record includes total times, p50/p95
+step times, hits/misses and the ratio `uncached_time / cached_time`. A ratio above
+one means improvement **for that synthetic component workload against its own
+uncached reference**. It is not a comparison with an optimized external engine.
 
-A [fresh full-vocabulary record](../benchmarks/results/cpu-129280-review-2026-10-26.json)
-exercises 129,280 candidates with the revised code and schema-2 collector. All
-outputs match. Its cached/uncached comparison is distinct from the old/new revision
-comparison; do not combine their ratios. The full-vocabulary warm case includes
-three misses and 33 hits, just as the historical CPU protocol does.
+## HIP and CUDA
 
-Schema 2 preserves failed runs and validates each benchmark's declared scope,
-equivalence, dimensions, counts and timing consistency. It records source and
-executable SHA256 digests before and after execution and fails a run whose observed
-inputs change. Source snapshots identify the working tree; they do not establish
-that a binary was built from those sources. `build_source_binding: not_attested`
-states that limit explicitly. A binary digest identifies the executable measured.
-
-## GPU measurement contract
-
-The HIP and CUDA executables compare the same two kernels with capacity zero and
-with caching. GPU events enclose execution; graph upload, reset, deliberate prefill
-and result readback are outside the samples. Run order alternates and all resulting
-tokens, rows, scores and hit flags are checked after completion.
-
-Unlike the CPU warm case, the GPU warm case deliberately preloads its hot set. The
-JSON records this per-case policy. Do not directly compare the CPU and GPU ratios
-as if their warmup definitions were identical. The GPU fixture also reuses one base
-logit vector; its memory behavior is not a substitute for varying production logits.
-
-`--graph 1` measures graph execution after upload; `--graph 0` measures ordinary
-enqueues. Record hardware, SDK, clocks/power policy, memory pressure, context and
-concurrency when running on a real target.
-
-After building the backend, collect correctness and timing together:
+Build the relevant native test and benchmark, then choose one backend:
 
 ```sh
-python3 tools/qualify_device.py --backend hip --build-dir build-hip \
-  --output benchmarks/results/my-halo-run.json -- \
+python3 tools/qualify_device.py \
+  --backend hip --build-dir build-hip \
+  --output results/hip-pair.json -- \
+  --vocab 129280 --steps 24 --repeats 5 --capacity 16 --graph 1
+
+python3 tools/qualify_device.py \
+  --backend cuda --build-dir build-cuda \
+  --output results/cuda-pair.json -- \
   --vocab 129280 --steps 24 --repeats 5 --capacity 16 --graph 1
 ```
 
-Use `--backend cuda --build-dir build-cuda` for CUDA. The wrapper refuses to
-benchmark after failed or unavailable native correctness and never overwrites an
-existing record. An isolated SDK installation may require its runtime library
-directories on `LD_LIBRARY_PATH`, as documented by that installation.
+The collector runs native correctness before the benchmark. Failure stops the
+measurement. An unavailable GPU/driver produces status `unavailable` and exit
+77; it is not a successful qualification. Direct CTest runs can report a skipped
+device test while the available host tests pass, so inspect the per-test result.
 
-The review's HIP and CUDA records both remain `unavailable`, with native-test exit
-code 77 and no timing payload. Compiling reduced-memory kernels and linking them
-from a C11 consumer do not qualify execution or establish a GPU speedup.
+The benchmark uses synthetic FP16 weights and **fixed base logits**, with cold,
+warm, mixed and collision patterns. The reference is the same two-kernel device
+operator at capacity zero. Cached/uncached order alternates and outputs plus hit
+flags are checked after every sample. Device-event intervals exclude reset,
+cache warm-up, graph setup and host readback; runtime warm-up occurs outside the
+samples. Warm/mixed workloads prefill selected cache entries before measurement.
+CPU and GPU warm workloads therefore should not be compared as identical traces.
 
-## Why a hit can help
+`--graph 1` measures replay of a captured workload; `--graph 0` uses direct
+enqueues. Keep that choice identical when comparing runs. Neither form measures
+model loading, contextual-logit production, target verification, sampling or
+complete request latency.
 
-At the recorded full-vocabulary dimensions, an FP16 rank-256 head has 66,191,360
-bytes, while one cached FP32 bias vector has 517,120 bytes. Sixteen cached vectors
-require 8,273,920 payload bytes (7.89 MiB), excluding small metadata and workspace.
-The 128-to-1 ratio describes those logical reads only. Actual memory traffic and
-whole-model speed depend on cache hierarchy, hit rate, launches and the rest of the
-inference cycle.
+## Record interpretation
 
-Keep capacity zero as the control. Measure misses and mapping invalidations as well
-as hits. The current fixed mapping requires a new instance when its candidate list
-grows. No measured production reuse or growth trace is available in this repository.
+The CPU/device collectors preserve commands, exit status, raw stdout/stderr,
+validated result data and source/executable hashes. Invalid or empty JSON,
+nonfinite values, inconsistent baselines and false equivalence fields cause a
+failed record. Evidence schema version 2 distinguishes a source snapshot plus
+binary SHA from a build attestation: observing both hashes does **not** prove
+that the binary was compiled from those exact files.
 
-## Certified selection
+Keep failures as well as successful runs. To assess application value, measure
+how often predecessors recur within one valid binding, how much time is spent
+in the original pair head, the cost of misses and invalidation, resident memory
+per context, and any new synchronization introduced by the adapter. Include
+cold and low-reuse cases. A high cache hit rate alone does not establish a
+latency improvement.
 
-The optional host selector scores a candidate subset and accepts its winner only
-when a validated bound excludes every omitted token. Otherwise, it requests the
-full scan. Input preparation performs O(V+K) work and takes immutable snapshots;
-certification is O(K). Preparation, candidate extraction and fallback costs must
-be included or demonstrably amortized. The exhaustive and random correctness
-checks are not performance results, and this selector is not wired into GPU decode.
+## Optional predecessor trace analysis
+
+[`analyze_predecessor_trace.py`](../tools/analyze_predecessor_trace.py) replays
+an externally produced native JSONL trace. Each draft record has this shape:
+
+```json
+{"event":"draft","context_id":1,"vocabulary_epoch":0,"vocabulary_size":4,"predecessors":[7,7],"cache_hits":[false,true],"capacity":16,"mode":"cached"}
+```
+
+`predecessors` are global embedding IDs, not indices into the candidate mapping.
+The example is a format illustration, not a measured run. Every context must
+start before its first draft with a cold cache. Increase `vocabulary_epoch`
+after every reset or change to weights, numerics, mapping or capacity, including
+a reorder that leaves the vocabulary size unchanged.
+
+```sh
+python3 tools/analyze_predecessor_trace.py \
+  --input /absolute/path/to/native-trace.jsonl \
+  --output results/trace-analysis.json \
+  --capacities 0,4,8,16,32,64
+```
+
+Native reported hits must match the exact direct-map replay. Capacity sweeps are
+simulations on that trace; no GPU execution, latency or speedup is inferred.
+Baseline/fallback records do not fill the simulated cache. Legacy window traces
+omit cache identity and require `--format legacy --assume-fixed-vocab`; their
+output cannot establish observed cache activity.
+
+## Optional external-application qualification
+
+[`qualify_engine.py`](../tools/qualify_engine.py) is a client for **one specific
+external HIP batch CLI and receipt contract**. It is not a universal engine
+launcher. The application, adapter, native model test and GGUF assets must be
+provided separately. The C library itself does not read `STRIX_LOOKAHEAD_*`
+environment variables.
+
+The external application must implement the flags constructed by
+`base_command()` in that script, original/uncached/cached selection through
+`STRIX_LOOKAHEAD_CAPACITY`, and structured `STRIX_LOOKAHEAD_RUN` receipts validated
+by `validate_receipt()`. The separate native test must emit
+`STRIX_LOOKAHEAD_MODEL_TEST` with the required schema and
+`fixture:"real_weights_synthetic_hidden"`: real weights, synthetic hidden inputs,
+bitwise-equal proposal outputs and zero failures. Refer to the script for the
+complete field and model-environment contract; merely accepting the environment
+variables or emitting arbitrary JSON is insufficient.
+
+For an application that already implements this contract:
+
+```sh
+python3 tools/qualify_engine.py \
+  --executable /absolute/path/to/compatible-batch-application \
+  --native-test /absolute/path/to/compatible-model-test \
+  --model /absolute/path/to/target.gguf \
+  --draft /absolute/path/to/draft.gguf \
+  --prompt-file /absolute/path/to/prompt.ids \
+  --concurrency 1,2,4 --layers 40 --generate 128 \
+  --max-positions 4096 --window-rows 6 --vocab full \
+  --capacity 16 --repeats 3 --trace \
+  --output results/new-application-campaign
+```
+
+This profile is single-device, fixed-window and greedy. Its deliberate limits
+are concurrency 1..7, generation of at least 3 tokens and capacity 1..129;
+40 layers is its full-model setting, while 4..39 are labeled truncated
+diagnostics. These are **external-profile limits**, not general library limits.
+
+The runner first requires the native proposal gate, then checks original,
+uncached and cached application runs with `--check --gather`, comparing exact
+output token IDs and retained-row/final-state digests. FNV64 digests are not a
+collision-free proof. Timing uses `--spec-only`, rotates/reverses arm order and
+still requires the same output IDs. Traces are enabled only for correctness.
+The ratio uses the median application-reported `wall_decode_seconds`; process
+wall time includes loading and is recorded separately.
+
+The output directory must be new. Logs, configuration, asset/executable hashes
+and partial records survive errors/timeouts. Missing receipts, mismatches,
+unexpected fallback or no actual adapter work fail the campaign. Runner tests
+use explicitly synthetic executable fixtures to check these failure paths;
+those tests are not evidence of a GPU or real-model run.

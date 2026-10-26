@@ -1,6 +1,8 @@
 /build/
 /build-*/
 /out/
+/local-install/
+/results/
 *.o
 *.a
 *.so

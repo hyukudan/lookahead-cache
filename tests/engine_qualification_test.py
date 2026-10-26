@@ -36,9 +36,14 @@ if scenario == "native_skipped":
     print("real-weight checks skipped in this explicitly synthetic executable")
     sys.exit(0)
 receipt = {"schema_version": 1, "backend": "hip", "adapter_compiled": True,
-           "real_weights": True, "draft_outputs_bitwise_equal": True, "failures": 0}
+           "real_weights": True, "fixture": "real_weights_synthetic_hidden",
+           "draft_outputs_bitwise_equal": True, "failures": 0}
 if scenario == "native_mismatch":
     receipt.update(draft_outputs_bitwise_equal=False, failures=1)
+if scenario == "native_wrong_fixture":
+    receipt["fixture"] = "synthetic_weights_synthetic_hidden"
+if scenario == "native_missing_fixture":
+    del receipt["fixture"]
 print("STRIX_LOOKAHEAD_MODEL_TEST " + json.dumps(receipt))
 if scenario == "native_duplicate":
     print("STRIX_LOOKAHEAD_MODEL_TEST " + json.dumps(receipt))
@@ -59,7 +64,7 @@ if scenario == "nonzero":
 if scenario == "timeout":
     time.sleep(2)
 if scenario == "no_receipt":
-    print("ordinary unpatched mock output")
+    print("ordinary mock output without the required receipt protocol")
     sys.exit(0)
 if scenario == "malformed":
     print('STRIX_LOOKAHEAD_RUN {')
@@ -212,6 +217,7 @@ class EngineQualificationTests(unittest.TestCase):
         self.assertEqual(record["build_source_binding"], "not_attested")
         native = record["native_model_test"]
         self.assertTrue(native["receipt"]["draft_outputs_bitwise_equal"])
+        self.assertEqual(native["receipt"]["fixture"], "real_weights_synthetic_hidden")
         self.assertEqual(native["model"], str(self.model.resolve()))
         self.assertEqual(native["draft"], str(self.draft.resolve()))
         self.assertEqual(native["executable_sha256_before"], native["executable_sha256_after"])
@@ -263,6 +269,17 @@ class EngineQualificationTests(unittest.TestCase):
                 self.assertEqual(record["runs"], [])
                 self.assertIsNone(record["summary"])
                 self.assertTrue(record["validation_errors"])
+                self.assertTrue((output / record["native_model_test"]["execution"]["stdout"]).is_file())
+
+    def test_native_fixture_scope_is_required(self):
+        for scenario in ("native_wrong_fixture", "native_missing_fixture"):
+            with self.subTest(scenario=scenario):
+                process, record, output = self.run_campaign(scenario)
+                self.assertEqual(process.returncode, 1, process.stderr + process.stdout)
+                self.assertEqual(record["status"], "failed")
+                self.assertEqual(record["runs"], [])
+                self.assertIsNone(record["summary"])
+                self.assertTrue(any("fixture" in error for error in record["validation_errors"]))
                 self.assertTrue((output / record["native_model_test"]["execution"]["stdout"]).is_file())
 
     def test_timeout_is_failure_with_partial_record(self):

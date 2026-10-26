@@ -1,107 +1,121 @@
-# Strix Lookahead
+# StrixLookahead
 
-**Componentes propios para acelerar la inferencia especulativa, diseñados primero
-para Strix Halo y con backend CUDA independiente.**
+**Biblioteca independiente de optimizaciones reutilizables de lookahead para inferencia LLM.**
 
-[English and build commands](README.md)
+[English](README.md) · [Español](README.es.md) · Versión **0.4.1**
 
-La versión 0.3.0 conecta la cabeza de transiciones de rango 256 y su caché al motor
-HIP mediante un parche privado y reversible. Añade una campaña que compara la
-ruta original, la biblioteca sin caché y la biblioteca con caché. El motor conserva
-la verificación, el estado del modelo y la corrección del muestreo.
+StrixLookahead contiene una caché host, un operador de pares de rango 256 para
+CPU/HIP/CUDA, un selector certificado experimental en CPU y sus pruebas y
+herramientas de medición. El objetivo principal es AMD Strix Halo; el backend
+CUDA permite integrar el componente en RTX. La aplicación enlaza esta
+biblioteca con su propio motor, que se encarga de cargar y ejecutar el modelo,
+verificar las propuestas y aplicar el muestreo.
 
-## Qué contiene
+La optimización principal reutiliza un vector de sesgo FP32 que depende del
+token predecesor, siempre que los pesos, la aritmética y el vocabulario ordenado
+sean los mismos. Los logits base actuales se utilizan en cada paso. Un acierto
+de caché evita repetir los productos escalares de rango 256; la mejora depende
+de la reutilización, las colisiones, los cambios de vocabulario y el coste del
+resto de la aplicación.
 
-| Componente | Estado |
-| --- | --- |
-| Caché genérica con API C, LRU y lecturas protegidas | Implementada y probada en CPU |
-| Cabeza FP16/FP32 y caché directa de resultados | Implementadas y comparadas con la misma ruta sin caché |
-| Backend HIP para `gfx1151` | Código compilado; ejecución en Strix pendiente |
-| Backend CUDA para RTX | Código compilado; ejecución en GPU pendiente |
-| Selector de candidatos con certificado y búsqueda completa de respaldo | Referencia CPU con pruebas exhaustivas y aleatorias |
-| Adaptador privado para el motor HIP | Implementado; ejecutable y pruebas nativas compilados para `gfx1151` |
-| Campaña de generación completa | Automatizada; ejecución con GPU y pesos reales pendiente |
+La [nota sobre el método](docs/method.md) explica el paper de referencia, su
+relación con esta implementación, los cambios realizados y las líneas pendientes. Los
+[resultados registrados](docs/results.md) separan las mediciones y sus límites
+de esas propuestas.
 
-Los dos backends mantienen dos kernels por paso. En un acierto leen el sesgo
-almacenado y calculan el ganador; en un fallo reproducen la operación original y
-guardan el resultado. No hay asignación de memoria, copia a CPU ni sincronización
-del host dentro del encolado de un paso.
+## Componentes
 
-Cada instancia fija los pesos y el vocabulario ordenado, y pertenece a un único
-stream. El crecimiento o cambio de ese vocabulario requiere sustituir la
-instancia. La capacidad cero permite comparar la misma operación sin caché.
+| Componente | Función | API pública |
+| --- | --- | --- |
+| Caché host | Vectores FP32 calculados por el llamador, préstamos de lectura/escritura y desalojo LRU | [`cache.h`](include/strix_lookahead/cache.h) |
+| Referencia CPU de pares | Pesos FP16, aritmética FP32 definida, selección voraz y caché de sesgos con asignación directa | [`pair.h`](include/strix_lookahead/pair.h) |
+| Operadores HIP / CUDA | Ejecución asíncrona ligada a un stream, con capacidad cero como referencia sin caché | [`device.h`](include/strix_lookahead/device.h) |
+| Selector experimental CPU | Certificado del candidato ganador mediante cotas conservadoras, con recorrido completo si no certifica | [`selection.h`](include/strix_lookahead/selection.h) |
+| Ejemplos y herramientas | Uso de las API, benchmarks sintéticos, pruebas de corrección y análisis de trazas | [`examples`](examples), [`tools`](tools) |
 
-## Integración privada en 0.3.0
+La interfaz tiene ABI C y la implementación usa C++20. La caché host genérica y
+la del operador de pares tienen políticas de desalojo diferentes. El selector
+requiere preparar snapshots en O(V); que el certificado cueste O(K) no demuestra
+por sí solo una aceleración de la inferencia completa.
 
-El adaptador asigna una caché independiente a cada solicitud y encadena los cinco
-tokens propuestos dentro de la GPU. Conserva dos kernels por paso y fusiona la
-publicación de resultados con el cálculo de confianza. Los estados y contadores
-regresan junto a la transferencia que el motor ya realizaba.
+## Compilar y probar en CPU
 
-La reserva de memoria incluye la caché de cada contexto. Un cambio real del
-vocabulario reconstruye su binding e invalida las entradas anteriores; cambiar de
-solicitud conserva su caché. La traza permite comprobar los aciertos registrados y
-simular otras capacidades sin deducir una velocidad a partir del hit rate.
-
-La campaña exige primero una prueba nativa de propuestas, confianza, embeddings
-y logits con los pesos reales. Después comprueba los tokens finales, los hashes
-de las filas conservadas y el estado final frente al motor original. Solo entonces
-ejecuta las pasadas de tiempo, con trazas desactivadas y orden rotativo.
-
-La primera ruta está acotada a un dispositivo HIP, generación greedy, ventanas
-fijas y concurrencias 1, 2 y 4. El adaptador CUDA, los dos nodos y el controlador
-adaptativo requieren integración o validación adicional. El código compilado y las
-pruebas CPU no demuestran todavía una mejora de velocidad en los Strix físicos.
-
-El motor de origen es público. El parche se conserva en este repositorio privado
-y está fijado a un commit y a las huellas de sus cinco archivos. El instalador no
-crea commits ni hace push. La [guía de integración](docs/engine-integration.md)
-contiene los comandos para compilar, aplicar o revertir el parche y ejecutar la
-campaña completa.
-
-## Mejoras de la revisión 0.2.1
-
-- Se rechazan también los modos de redondeo SSE modificados por separado del
-  entorno x87. La regresión reproduce un caso que podía cambiar el token ganador.
-- La referencia CPU omite 129 sumas redundantes por producto de rango 256 y evita
-  convertir el embedding en un acierto si nadie solicita esa salida.
-- La reducción de ganadores HIP/CUDA utiliza 128 bytes de memoria compartida y
-  una barrera por bloque, frente a 4.096 bytes y nueve barreras. Las operaciones
-  que calculan las puntuaciones conservan su orden original. La ganancia temporal
-  en GPU sigue pendiente de medición física.
-- El certificado acepta también empates demostrablemente favorables por ID global,
-  sin cambiar el ganador ni añadir un recorrido del vocabulario durante la consulta.
-- Los colectores validan el contenido de los benchmarks, conservan los fallos y
-  registran huellas de los ejecutables. Una salida vacía, incompleta o inconsistente
-  ya no puede presentarse como una calificación superada.
-
-La [revisión técnica](docs/review-0.2.1.md) detalla los cambios, las mediciones y sus
-límites. La interfaz C y la política de caché siguen siendo compatibles.
-
-## Pruebas reproducibles
+Clona este mismo repositorio con una cuenta que tenga acceso:
 
 ```sh
+git clone git@github.com:hyukudan/strix-lookahead.git
+cd strix-lookahead
+
 cmake -S . -B build-cpu -DCMAKE_BUILD_TYPE=Release
 cmake --build build-cpu --parallel
 ctest --test-dir build-cpu --output-on-failure
-./build-cpu/sl_pair_benchmark --vocab 129280 --steps 12 --repeats 3 --capacity 16
+./build-cpu/sl_cache_example
+./build-cpu/sl_pair_example
 ```
 
-El banco CPU usa datos sintéticos y compara el mismo componente con y sin caché.
-Conserva los fallos iniciales y prueba reutilización, tokens nuevos, carga mixta y
-colisiones. Las cifras no representan tokens por segundo de un LLM ni rendimiento
-medido en Strix Halo.
+Se necesita un compilador C++20 y CMake 3.21 o posterior. Python 3.10+ habilita
+las pruebas opcionales de herramientas y los colectores de evidencia. Los
+ejemplos utilizan arrays sintéticos pequeños y no necesitan archivos de modelo.
+La [guía de uso](docs/usage.md) explica la compilación HIP para `gfx1151`, CUDA,
+la instalación y las opciones disponibles.
 
-El [README principal](README.md) incluye la compilación HIP/CUDA y los ejecutables
-para medir con eventos GPU y grafos. Si no hay hardware o controlador disponible,
-devuelven código 77; esa omisión no se presenta como una prueba superada.
+## Integrar la biblioteca
 
-El selector certificado evita la búsqueda completa solo cuando demuestra que el
-ganador no puede estar entre los candidatos excluidos. Su preparación tiene coste
-O(V+K), que debe amortizarse o integrarse en el productor de logits antes de medir
-una ventaja. Su ejecución GPU y un corrector contextual entrenado son trabajos
-posteriores.
+Instala la compilación elegida y enlaza su target CMake:
 
-Documentación: [arquitectura](docs/architecture.md),
-[integración](docs/integration.md), [benchmarks](docs/benchmarks.md),
-[validación](docs/validation.md) y [plan](docs/roadmap.md).
+```sh
+cmake --install build-cpu --prefix "$PWD/local-install"
+```
+
+```cmake
+find_package(StrixLookahead 0.4.1 CONFIG REQUIRED COMPONENTS cache)
+target_link_libraries(my_application PRIVATE StrixLookahead::cache)
+```
+
+Al configurar la aplicación, añade el prefijo instalado a `CMAKE_PREFIX_PATH`.
+Una compilación con GPU también exporta `StrixLookahead::hip` o
+`StrixLookahead::cuda`. Se puede incorporar el código mediante `add_subdirectory`.
+La [guía de integración](docs/integration.md) detalla ambas opciones y las
+responsabilidades sobre aritmética, vocabulario, invalidación, memoria, streams
+y comprobación de resultados.
+
+## Medir el componente
+
+Tras compilar para CPU:
+
+```sh
+python3 tools/run_cpu_benchmark.py \
+  --executable build-cpu/sl_pair_benchmark \
+  --output results/cpu-pair.json --pin -- \
+  --vocab 8192 --steps 24 --repeats 5 --capacity 16
+```
+
+Usa un archivo de salida nuevo en cada ejecución. `--pin` fija el proceso a una
+CPU permitida en Linux; omítelo si la plataforma no permite esa afinidad. La
+comparación utiliza datos sintéticos y el mismo operador CPU con capacidad cero
+como referencia. No mide la inferencia de un modelo completo ni otro motor.
+
+Para GPU, `tools/qualify_device.py` exige que las pruebas nativas pasen antes de
+medir. La [guía de benchmarks](docs/benchmarks.md) explica los comandos, qué
+incluyen los tiempos y cómo se registran los fallos. `qualify_engine.py` es una
+herramienta opcional que exige una aplicación externa con una CLI y un contrato
+de recibos específicos; ni esa aplicación ni su adaptador vienen incluidos.
+
+## Validación y alcance
+
+El [informe de validación](docs/validation.json) separa las pruebas host, la
+compilación y la ejecución nativa en dispositivos. En esta versión pasaron las
+siete pruebas CTest host, el ejemplo de pares y los consumidores del paquete.
+Se completó la compilación HIP para `gfx1151` y CUDA para las arquitecturas
+`86`, `89`, `120`. No se han ejecutado pruebas/benchmarks nativos de GPU ni
+modelos para esta versión.
+
+La equivalencia y el rendimiento con GPU/modelos deben validarse en el hardware
+y la aplicación concretos; aquí no se afirma una aceleración de modelos ni
+superioridad frente a otros sistemas. Revisa también las pruebas omitidas: una
+GPU no disponible no cuenta como cualificación aprobada.
+
+- [Compilación y ejemplos de API](docs/usage.md)
+- [Integración y contrato de corrección](docs/integration.md)
+- [Metodología de medición y herramientas opcionales](docs/benchmarks.md)
+- [Licencia](LICENSE), [avisos](NOTICE), [procedencia](PROVENANCE.json)

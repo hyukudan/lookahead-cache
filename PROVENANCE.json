@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "project": "StrixLookahead",
+  "version": "0.4.1",
+  "distribution": "standalone_optimization_library",
+  "repository": "https://github.com/hyukudan/strix-lookahead",
+  "component_baseline": {
+    "commit": "51f2132a3b4d8ff01b54a5726f92499ea04033a3",
+    "scope": [
+      "include/strix_lookahead/",
+      "src/",
+      "support/",
+      "examples/",
+      "tests/",
+      "tools/"
+    ]
+  },
+  "changes_since_component_baseline": [
+    "Standalone and embedded CMake package support with explicit backend targets",
+    "Shared caller-selected HIP SDK support for source embedding",
+    "Required real-weights synthetic-hidden fixture receipt in the optional external qualification driver",
+    "Minimal cached-versus-uncached pair operator usage example",
+    "Library-first usage, integration and benchmark documentation"
+  ],
+  "vendored_inference_engines": [],
+  "model_weights": [],
+  "required_engine_repository": null,
+  "external_qualification_driver": {
+    "path": "tools/qualify_engine.py",
+    "engine_source_included": false,
+    "requires_specific_cli_and_receipt_protocol": true,
+    "protocol_documentation": "docs/integration.md"
+  },
+  "license": "Apache-2.0",
+  "validation_record": "docs/validation.json",
+  "native_device_qualification": "pending",
+  "full_model_performance": "not_measured",
+  "research_references": [
+    {
+      "id": "arXiv:2607.05147v1",
+      "url": "https://arxiv.org/html/2607.05147v1",
+      "relevance": "First-order low-rank transition head; architectural background, not local performance evidence"
+    },
+    {
+      "id": "arXiv:2610.12570v1",
+      "url": "https://arxiv.org/html/2610.12570v1",
+      "relevance": "Contextual correction of parallel drafts; comparison of algorithmic scope, not an implemented full corrector"
+    }
+  ],
+  "method_documentation": "docs/method.md",
+  "local_results_documentation": "docs/results.md",
+  "bibliography": "references.bib"
+}

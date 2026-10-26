@@ -1,138 +1,168 @@
-# Integration
+# Integrate the optimization library
 
-## Status and engine boundary
+StrixLookahead provides reusable computation and storage components. The caller
+owns model loading, tensor layout conversion, contextual logits, draft policy,
+target verification, attention/KV state, rollback and sampling. Integration is
+specific to the application's numerical and execution contracts.
 
-Version 0.3 implements a private HIP adapter against engine commit
-`683e69e91eb2203addf016e2cfdead8217e65fa2`. The [engine integration guide](engine-integration.md)
-covers its pinned patch, build options and three-variant qualification runner.
-Physical-device and real-model qualification remain pending. The contracts below
-also apply when embedding the standalone library in another caller.
+## CMake integration
 
-The adapter connects a DeepSeek proposal head with global FP16 pair matrices,
-rank 256, ordered candidate IDs, separate core/extra base-logit arrays and a
-confidence head consuming the predecessor embedding. It preserves the engine's
-declared arithmetic, global-ID tie-breaking and confidence inputs. The engine
-retains target verification and state rollback. Qualification compares against
-the existing fused selector as well as the new operator with caching disabled.
-The standalone host benchmark compares the same CPU reference with capacity zero;
-it is not a measurement of that engine.
+For an installed package:
 
-## CPU pair reference
-
-1. Initialize `sl_pair_config`. Set candidate count, global embedding-row count,
-   cache capacity, borrowed FP16 arrays and optional ordered global IDs.
-2. Select `SL_PAIR_HEAD_GLOBAL` for a head indexed by global ID, or
-   `SL_PAIR_HEAD_SELECTED` for a head already packed in candidate order.
-3. Create the instance, then call `sl_pair_step` with the current FP32 base logits
-   and global predecessor ID. Optional diagnostic buffers expose the complete
-   bias and converted predecessor embedding on both hits and misses.
-4. Keep arrays and mapping immutable. Destroy the instance when finished; create
-   a new instance for a changed model or vocabulary.
-
-The CPU call is synchronous and externally serialized. Unsupported floating-point
-execution modes fail before changing cache state. Invalid predecessors return
-`SL_INVALID_ARGUMENT`; all-NaN scores return `SL_INVALID_STATE` with an invalid
-token, while still completing the bias fill. Capacity zero is the uncached path.
-
-## HIP and CUDA pair path
-
-Create the corresponding backend instance with device model pointers and a native
-stream. Initialization may allocate, transfer IDs for validation and synchronize.
-The current device and the stream binding must remain correct for every call.
-
-`enqueue_step` accepts a device predecessor pointer and either one contiguous base
-vector or two logical segments: `base_head[0..split_count)` followed by
-`base_tail[0..V-split_count)`. This accommodates the engine's core and extra logits
-without packing them on every step. Candidate IDs must describe that combined
-order. Global-head layout uses the existing global pair matrix directly.
-
-The two queued kernels compute/cache/select, then finish and publish. Enqueue
-does not allocate, synchronize or read results back to the host. `SL_OK` from
-enqueue means the launches were accepted; inspect the device result status after
-completion and check native asynchronous errors. A failed enqueue poisons the
-instance until a successful reset. Reset cannot guarantee recovery from a failed
-device context.
-
-Argument-validation failures leave the instance usable. A failed capture must be
-ended and discarded; reset cannot repair a partially captured step. Stop graph
-replays while an instance is poisoned: native graph launch bypasses the enqueue
-function's host-side guard. The integration owns that external replay lifecycle.
-
-Request `markov_out` when the confidence calculation needs the predecessor
-embedding. A cache hit must still populate it. The next predecessor may point to
-the previous output's token field, allowing device-side chaining without a host
-readback. Other input/output overlaps are unsupported.
-
-The caller orders producers and consumers with events. Borrowed buffers remain
-valid until all consuming work completes. Instances cannot be shared across
-streams. Enqueue can participate in graph capture; create, reset, query and destroy
-are outside capture. Replayed graphs must use the bound stream and retain their
-instance and buffers until their final execution finishes.
-
-## Vocabulary changes and request contexts
-
-The inspected engine's code default is the full vocabulary. Its production profile
-selects a reduced vocabulary automatically: a nominal 32k core plus a language
-pack, or a 48k fallback, with prompt/context IDs included. Actual row counts depend
-on the deployed lists and deduplication. Only previously unseen IDs grow the list;
-calling the vocabulary-update method does not necessarily change the mapping.
-
-Accepted proposals already belong to the current vocabulary. In a speculative
-window, the target correction can therefore introduce at most one new ID. Plain
-decode periods can accumulate more additions before the next draft. The inspected
-serving path assigns whole request contexts to ranks, and each context retains its
-own ordered vocabulary. A separate vocabulary-sharded path divides candidate rows
-between ranks and can move the partition boundary when the list grows.
-
-The current pair API fixes the mapping and count at creation. **Growth requires a
-new instance and loses the previous entries.** Reset does not rebind pointers or
-extend the mapping. A context switch may select another matching instance; it must
-not reuse an instance created for a different order. Reusing one instance across
-contexts is valid only when weights, numerical identity and mapping are identical.
-
-In the inspected engine, global pair weights and embedding arrays live with the
-drafter. Core logits use persistent scratch storage. Extra IDs and logits belong
-to request contexts; their buffers can be swapped or grown. An adapter must follow
-those lifetimes rather than retaining an address after replacement.
-
-The private adapter adds predecessor/context/epoch traces, actual hit/miss counts
-and resident payload receipts. No native workload trace or cache speed result has
-yet been collected here. Before enabling caching by default, record predecessors,
-context identity, mapping changes, hits/misses and whole-cycle times.
-Include invalidation costs in the comparison. An append-only extension design is
-a possible later improvement, not a current capability.
-
-## Generic host-cache integration
-
-For caller-computed vectors, use `cache.h` independently: acquire by predecessor;
-on a miss reserve, fill every element and commit; release each read lease after
-consumption. Abort failed fills. A reservation may immediately evict an unpinned
-victim, and abort does not restore it. Busy capacity can fall back to uncached work.
-
-Do not reuse a live lease's output object or complete copied leases independently.
-Acquire/reserve overwrite their output on success and clear it on failure;
-release/commit/abort clear only on success. Generic-cache reset can replace identity
-when idle, but dimension changes require a new cache. Its host pointers provide no
-asynchronous device-readiness contract.
-
-HIP/CUDA compilation is recorded separately from physical GPU qualification.
-Native model execution, graph replay, failure handling and end-to-end performance
-remain required integration gates. The first engine campaign isolates a single
-HIP node with greedy decoding and fixed windows; it does not qualify adaptive
-controller policies or two-node execution.
-
-## Installed CMake consumer
-
-The installed C ABI can be linked from a project enabling only C and C++. GPU
-consumers still need the corresponding runtime SDK. The CUDA package dependency
-requires version 12.8 or newer, matching the library's stream-ownership API.
-
-After building, exercise installation and an independent C11 consumer with:
-
-```sh
-cmake -DSL_BUILD_DIR="$(pwd)/build-cpu" -P tests/install_consumer.cmake
+```cmake
+cmake_minimum_required(VERSION 3.21)
+project(MyApplication LANGUAGES C CXX)
+find_package(StrixLookahead 0.4.1 CONFIG REQUIRED COMPONENTS cache)
+add_executable(my_application main.cpp)
+target_link_libraries(my_application PRIVATE StrixLookahead::cache)
 ```
 
-For a non-default SDK, pass `SL_SDK_PREFIX_PATH` for HIP or
-`SL_CUDATOOLKIT_ROOT` for CUDA. The consumer links backend symbols without requiring
-a GPU language in its own project; this is a packaging check, not device execution.
+Select the `hip` or `cuda` package component and link `StrixLookahead::hip` or
+`StrixLookahead::cuda` when calling that device API. Those targets transitively
+include the host target and corresponding runtime dependencies. They exist only
+if that backend was built. A C/C++ consumer of the C ABI need not compile its own
+HIP/CUDA translation unit unless the application itself defines device code.
+
+For a source checkout placed at `third_party/strix-lookahead`:
+
+```cmake
+set(SL_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(SL_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(SL_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+set(SL_ENABLE_HIP ON CACHE BOOL "" FORCE)
+add_subdirectory(third_party/strix-lookahead)
+target_link_libraries(my_application PRIVATE StrixLookahead::hip)
+```
+
+The parent project sets its HIP compiler, SDK and architecture as in the
+[build guide](usage.md#hip-build-for-strix-halo). For a CPU integration omit
+`SL_ENABLE_HIP` and link `StrixLookahead::cache`; for CUDA select
+`SL_ENABLE_CUDA` and its target. This repository supplies the library and examples,
+not a prewritten adapter for arbitrary inference engines.
+
+## What the pair operator computes
+
+For predecessor `p` and ordered candidate row `j`, the global-head layout uses:
+
+```text
+bias_p[j] = dot256(head[token_ids[j]], embeddings[p])
+score[j]  = current_base_logits[j] + bias_p[j]
+```
+
+The cached object is the complete `bias_p` FP32 vector. Base logits and the
+winning token are recomputed for each step. A cache hit still produces the
+predecessor embedding through optional `markov_out[256]`, so a caller can retain
+its live confidence computation. It does not certify the caller's confidence,
+verification or sampling algorithm.
+
+[`sl_pair_config`](../include/strix_lookahead/pair.h) requires:
+
+- A fixed **rank of 256** and row-major IEEE binary16 bit patterns, supplied as
+  `uint16_t` arrays for `head` and `embeddings`.
+- `embedding_rows` rows in the embedding table. Each predecessor is a global
+  row ID within that table.
+- An ordered, unique candidate mapping of `vocabulary_size` global IDs.
+  A null `token_ids` pointer means IDs `0..V-1`.
+- `SL_PAIR_HEAD_GLOBAL` for a head indexed by global ID, or
+  `SL_PAIR_HEAD_SELECTED` for `V` head rows already arranged in candidate order.
+
+The CPU pair reference and device implementations use a **direct-map** cache.
+Each predecessor maps to one slot through `sl_pair_slot_for`; a collision replaces
+that entry. `capacity_entries=0` executes the same selector without caching and
+is the appropriate library baseline. The generic host cache below uses LRU.
+
+## Numerical compatibility
+
+The rank-256 reduction has 32 logical lanes. Lane `l` accumulates terms
+`8*l..8*l+7` in order, followed by the XOR reduction distances `16,8,4,2,1`.
+Multiplications and additions round separately to FP32. The supplied builds
+disable contraction/fast-math and preserve gradual underflow for these kernels.
+
+Greedy ties choose the **lowest global token ID**, independently of candidate
+order. NaN scores are ignored; an all-NaN step returns `SL_INVALID_STATE` with an
+invalid token. All-negative-infinity scores still have a valid tie winner. An
+all-NaN step can still publish its computed bias, so failure of selection does
+not imply an empty cache.
+
+The CPU path requires round-to-nearest and gradual underflow; it rejects other
+rounding modes and x86 FTZ/DAZ without changing cache state. On other host
+architectures the caller ensures gradual underflow. A fused, reassociated,
+TF32 or differently quantized existing head is not automatically equivalent to
+this contract. Compare the proposal results and any consumed diagnostic arrays
+against the existing path before using it in a model pipeline.
+
+## Identity, invalidation and memory
+
+`sl_identity` carries caller-supplied identities for weights, numerical profile
+and **ordered** vocabulary. The library does not hash model files or detect
+mutated external tensors. The pair operator borrows immutable model/mapping
+arrays for its entire lifetime. Create a new instance when weights, layout,
+dimensions or candidate IDs/order change, even when the vocabulary size stays
+the same. Keep new instances' identity metadata consistent with their inputs.
+
+`sl_pair_reset` invalidates entries while retaining the existing pointers and
+dimensions; it does not authorize mutating those inputs. Device reset similarly
+invalidates without rebinding. A change in contextual base logits alone does
+not invalidate the static pair bias.
+
+Payload storage is `capacity × V × sizeof(float)` per instance. For example,
+16 entries and 129,280 candidates require **8,273,920 bytes**, about 7.89 MiB,
+before tags, mapping and workspace. Set `payload_budget_bytes` explicitly for
+your memory policy; zero means no additional payload cap. The cap excludes
+metadata and does not reserve the application's other tensors. Multiply the
+budget by the number of resident contexts/instances when planning memory.
+
+## GPU lifetime, ordering and results
+
+[`device.h`](../include/strix_lookahead/device.h) is the authoritative lifecycle
+contract. The important sequence is:
+
+1. Allocate model, mapping, predecessor, base and result buffers on the chosen
+   device. Create the instance on that current device and bind it to one native
+   stream. Creation validates mapping IDs with a device-to-host copy.
+2. Serialize calls on the instance, keep the same current device and use stream
+   events to order producers/consumers on other streams. Distinct streams need
+   distinct instances.
+3. Enqueue with device pointers. A contiguous base vector uses `split_count=V`
+   and `base_tail=null`; the split form represents a head segment followed by a
+   tail segment. Optional outputs are FP32 `markov_out[256]` and `bias_out[V]`.
+4. Treat `SL_OK` from enqueue as launch acceptance. Wait/query for completion,
+   check the native runtime for errors, and inspect **`out->status`** before
+   consuming `out->selection`. `sl_*_pair_query` returns `SL_BUSY` while pending.
+5. Keep all borrowed arrays, buffers and the instance alive until work completes.
+   Reset/destruction can synchronize. Check destroy's result against the header:
+   a device error destroys the handle, while specified precheck failures leave
+   it alive.
+
+Enqueue does not allocate, synchronize or copy results to the host. It uses two
+kernel launches and fixed workspace. Creation/reset/destruction must occur
+outside capture; captured graphs run on the bound stream and must not outlive
+the instance. Buffers may not overlap, except that the predecessor can alias
+`out->selection.token` for device token chaining.
+
+A native enqueue failure poisons the instance until a successful reset.
+An enqueue failure during capture requires ending and discarding that capture;
+reset cannot repair a partially captured graph. A runtime/device failure may
+also require recovery outside the library.
+
+## Generic host cache and certified selector
+
+The host cache stores caller-computed FP32 vectors. On `SL_MISS`, reserve a
+writer, fill **every value**, commit, acquire a reader and release it after use.
+Abort an unfinished producer. Readers pin committed entries; reserve evicts the
+least-recently-used unpinned entry. Filling/fully pinned situations return
+`SL_BUSY`. All calls require external serialization. A lease copy is the same
+ticket, not a second independently releasable lease. Reset/destroy refuse while
+leases remain active; changed dimensions require a new cache.
+
+The optional CPU selector copies vocabulary, base and bias snapshots. Base and
+bias must come from the **same vocabulary handle**. Snapshot preparation reads
+the full vocabulary; only `sl_selection_certify` is O(K). On `SL_MISS`, call
+`sl_selection_full`; an invalid/overflow status must be handled as an error.
+Finite inputs, compatible dimensions and the prescribed floating-point
+environment are required. This can save work only if snapshot preparation is
+reused or incorporated into an existing producer. There is no GPU selector in
+this version.
+
+Use the [benchmark guide](benchmarks.md) to separate operator correctness,
+component timings and complete application measurements.
