@@ -11,6 +11,9 @@ namespace SL_DEVICE_NAMESPACE {
 
 constexpr unsigned block_threads = 256;
 constexpr unsigned maximum_blocks = 512;
+constexpr unsigned subgroup_threads = 32;
+constexpr unsigned block_subgroups = block_threads / subgroup_threads;
+static_assert(block_threads % subgroup_threads == 0 && block_subgroups <= subgroup_threads);
 
 struct entry {
     std::uint32_t token;
@@ -52,7 +55,8 @@ __device__ inline float half_to_float(std::uint16_t value) {
     return __half2float(__ushort_as_half(value));
 }
 
-__device__ inline float xor_lane(float value, unsigned distance) {
+template<class T>
+__device__ inline T xor_lane(T value, unsigned distance) {
 #if defined(SL_GPU_HIP)
     return __shfl_xor(value, static_cast<int>(distance), 32);
 #else
@@ -76,6 +80,38 @@ __device__ inline winner candidate(float score, std::uint32_t token,
     return {score, token, row, score == score ? 1u : 0u};
 }
 
+// All 32 lanes must participate, including lanes with no candidate in a ragged
+// tile. This moves winners, never re-associates score arithmetic: unique global
+// IDs make choose's tie-break independent of the reduction tree (also for +/-0).
+__device__ inline winner subgroup_winner(winner value) {
+#pragma unroll
+    for (unsigned distance = subgroup_threads / 2; distance != 0; distance >>= 1) {
+        const winner other{xor_lane(value.score, distance),
+                           xor_lane(value.token, distance),
+                           xor_lane(value.row, distance),
+                           xor_lane(value.valid, distance)};
+        value = choose(value, other);
+    }
+    return value;
+}
+
+// Only thread zero consumes the returned block winner. One shared-memory
+// exchange replaces the full 256-element shared reduction and its nine
+// barriers. The second shuffle runs in one complete logical subgroup, which
+// also works when HIP's physical wavefront contains two such subgroups.
+__device__ inline winner block_winner(winner value, winner* subgroup_partials) {
+    const unsigned thread = threadIdx.x;
+    const unsigned lane = thread % subgroup_threads;
+    value = subgroup_winner(value);
+    if (lane == 0) subgroup_partials[thread / subgroup_threads] = value;
+    __syncthreads();
+    if (thread < subgroup_threads) {
+        value = thread < block_subgroups ? subgroup_partials[thread] : no_winner();
+        value = subgroup_winner(value);
+    }
+    return value;
+}
+
 __device__ inline std::uint32_t global_id(const model_view& model,
                                          std::uint32_t row) {
     return model.token_ids ? model.token_ids[row] : row;
@@ -93,7 +129,7 @@ __global__ void pair_pass(model_view model, const std::uint32_t* predecessor,
                           const float* base_head, const float* base_tail,
                           std::uint32_t split, winner* partials,
                           float* markov_out, float* bias_out) {
-    __shared__ winner shared[block_threads];
+    __shared__ winner shared[block_subgroups];
     const unsigned thread = threadIdx.x;
     const std::uint32_t previous = *predecessor;
     winner best = no_winner();
@@ -159,13 +195,8 @@ __global__ void pair_pass(model_view model, const std::uint32_t* predecessor,
             }
         }
     }
-    shared[thread] = best;
-    __syncthreads();
-    for (unsigned distance = block_threads / 2; distance != 0; distance >>= 1) {
-        if (thread < distance) shared[thread] = choose(shared[thread], shared[thread + distance]);
-        __syncthreads();
-    }
-    if (thread == 0) partials[blockIdx.x] = shared[0];
+    best = block_winner(best, shared);
+    if (thread == 0) partials[blockIdx.x] = best;
 }
 
 // Stream ordering is the publication barrier: all blocks of pair_pass finish
@@ -173,16 +204,11 @@ __global__ void pair_pass(model_view model, const std::uint32_t* predecessor,
 __global__ void pair_finish(model_view model, const std::uint32_t* predecessor,
                             const winner* partials, std::uint32_t count,
                             sl_device_result* out) {
-    __shared__ winner shared[block_threads];
+    __shared__ winner shared[block_subgroups];
     const unsigned thread = threadIdx.x;
     winner best = no_winner();
     for (unsigned i = thread; i < count; i += block_threads) best = choose(best, partials[i]);
-    shared[thread] = best;
-    __syncthreads();
-    for (unsigned distance = block_threads / 2; distance != 0; distance >>= 1) {
-        if (thread < distance) shared[thread] = choose(shared[thread], shared[thread + distance]);
-        __syncthreads();
-    }
+    best = block_winner(best, shared);
     if (thread == 0) {
         const std::uint32_t previous = *predecessor;
         sl_device_result result{};
@@ -196,7 +222,6 @@ __global__ void pair_finish(model_view model, const std::uint32_t* predecessor,
                                              model.entries[slot].token == previous ? 1u : 0u;
                 model.entries[slot] = {previous, 1};
             }
-            best = shared[0];
             result.status = best.valid ? SL_OK : SL_INVALID_STATE;
             if (best.valid) {
                 result.selection.token = best.token;

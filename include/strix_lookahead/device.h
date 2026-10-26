@@ -56,7 +56,11 @@ sl_status sl_cuda_pair_create(const sl_pair_config* config, void* native_stream,
  * predecessor may point to out->selection.token for in-place token chaining.
  * SL_OK means launches were enqueued, not that the device completed them.
  * Inspect out->status after completion and check the native stream for errors.
- * An enqueue error poisons the instance until a successful reset.
+ * A native enqueue failure poisons the instance until a successful reset;
+ * argument validation failures leave it usable. If enqueue fails during graph
+ * capture, end and discard that capture: reset cannot repair a partially
+ * captured step. Do not launch graphs using a poisoned instance: a native graph
+ * replay bypasses this library's host-side guard.
  * Capacity zero executes the same selector without caching for comparison. */
 sl_status sl_hip_pair_enqueue_step(sl_hip_pair* engine,
                                   const uint32_t* predecessor,

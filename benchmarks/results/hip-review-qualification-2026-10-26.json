@@ -1,0 +1,64 @@
+{
+  "schema_version": 2,
+  "backend": "hip",
+  "started_at_utc": "2026-10-26T01:27:32.764042+00:00",
+  "provenance": {
+    "source_sha256": {
+      "include/strix_lookahead/cache.h": "4018a29ed9258a1bef8be00671ff0c893badeb7dfeb8e6408a661b1089207777",
+      "include/strix_lookahead/pair.h": "472bd40d300767ba543216e5533e961333068094dbe4e22279bf89ac3079edfb",
+      "include/strix_lookahead/device.h": "1994733a6e69953f33260a943ce20c5e5ddf934cc8cffad2255daaf044196749",
+      "src/pair.cpp": "438050de7121b00808dbc399daabee625db60c6bc911759e753964b4e3d8c410",
+      "src/cache.cpp": "0b904202615b440529bca0fff393eb1855f42002e21d30e2cb562e365770ef68",
+      "src/device_hip.hip": "65047fcd52c7292456e881b13dbb10f96cffc63ca786e7ae60528ac846f2401d",
+      "src/device_kernels.hpp": "f85ca7a6bde58365ad3122886801261ec20624730030e01c9471e7b8df347ca1",
+      "src/device_runtime.hpp": "2c439c3b4000308ad5cc4d28b0086f3c4ed786bd90bf5d354d7bee4fc07e3036",
+      "support/device_runtime.hpp": "2b64946ff777a1f1f0d8f12fcbb2f816e85104bcb96472372628c0d080273886",
+      "tests/device_test.cpp": "4472889d63dd83324ce542625eb1dc79f709ba25f2b4a4cd7d7e0584ad683353",
+      "examples/device_benchmark.cpp": "64cd8f1226fc17ecdccece8336a72b35f0530c35ddec86cba39e2f572a32474f",
+      "CMakeLists.txt": "46557208d552edcfa7e2230e13aa293f687487c46d67f76ba927b51896031a54",
+      "tools/qualify_device.py": "a48a9b2a59c161545d258bfe4f1fe88a402ff15e7f8c2a0e1e3b0ff8313b1f5a",
+      "tools/evidence.py": "11fff65d2b377fe7f679735d7e686ab26b244b3654ad40e7970b7efbd69afdda"
+    },
+    "executable_sha256": {
+      "sl_hip_test": "068e9d55f84122b04526f8ec4c4eee5d2328ae5cc0300b34b2ce4edaa72f927d",
+      "sl_hip_benchmark": "35029e4381f643d5ab916bcf5987490b370000eb3cfe85af0444ab97a7e66b2e"
+    },
+    "build_source_binding": "not_attested",
+    "interpretation": "Source digests describe the working tree at run time; executable digests identify the binaries run. No source-to-binary build attestation is claimed.",
+    "source_sha256_after": {
+      "include/strix_lookahead/cache.h": "4018a29ed9258a1bef8be00671ff0c893badeb7dfeb8e6408a661b1089207777",
+      "include/strix_lookahead/pair.h": "472bd40d300767ba543216e5533e961333068094dbe4e22279bf89ac3079edfb",
+      "include/strix_lookahead/device.h": "1994733a6e69953f33260a943ce20c5e5ddf934cc8cffad2255daaf044196749",
+      "src/pair.cpp": "438050de7121b00808dbc399daabee625db60c6bc911759e753964b4e3d8c410",
+      "src/cache.cpp": "0b904202615b440529bca0fff393eb1855f42002e21d30e2cb562e365770ef68",
+      "src/device_hip.hip": "65047fcd52c7292456e881b13dbb10f96cffc63ca786e7ae60528ac846f2401d",
+      "src/device_kernels.hpp": "f85ca7a6bde58365ad3122886801261ec20624730030e01c9471e7b8df347ca1",
+      "src/device_runtime.hpp": "2c439c3b4000308ad5cc4d28b0086f3c4ed786bd90bf5d354d7bee4fc07e3036",
+      "support/device_runtime.hpp": "2b64946ff777a1f1f0d8f12fcbb2f816e85104bcb96472372628c0d080273886",
+      "tests/device_test.cpp": "4472889d63dd83324ce542625eb1dc79f709ba25f2b4a4cd7d7e0584ad683353",
+      "examples/device_benchmark.cpp": "64cd8f1226fc17ecdccece8336a72b35f0530c35ddec86cba39e2f572a32474f",
+      "CMakeLists.txt": "46557208d552edcfa7e2230e13aa293f687487c46d67f76ba927b51896031a54",
+      "tools/qualify_device.py": "a48a9b2a59c161545d258bfe4f1fe88a402ff15e7f8c2a0e1e3b0ff8313b1f5a",
+      "tools/evidence.py": "11fff65d2b377fe7f679735d7e686ab26b244b3654ad40e7970b7efbd69afdda"
+    },
+    "executable_sha256_after": {
+      "sl_hip_test": "068e9d55f84122b04526f8ec4c4eee5d2328ae5cc0300b34b2ce4edaa72f927d",
+      "sl_hip_benchmark": "35029e4381f643d5ab916bcf5987490b370000eb3cfe85af0444ab97a7e66b2e"
+    },
+    "unchanged_during_run": true
+  },
+  "end_to_end_inference": false,
+  "correctness": {
+    "command": [
+      "sl_hip_test"
+    ],
+    "exit_code": 77,
+    "stdout": "SKIP HIP device qualification: no ROCm-capable device is detected\n",
+    "stderr": ""
+  },
+  "benchmark": null,
+  "validation_errors": [],
+  "qualification_exit_code": 77,
+  "status": "unavailable",
+  "finished_at_utc": "2026-10-26T01:27:32.787419+00:00"
+}

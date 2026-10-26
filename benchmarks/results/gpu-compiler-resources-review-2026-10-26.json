@@ -1,0 +1,177 @@
+{
+  "schema_version": 1,
+  "kind": "compiler_resource_analysis",
+  "measured_runtime_speedup": false,
+  "native_device_execution": false,
+  "generated_at_utc": "2026-10-26T01:28:30.946814+00:00",
+  "compiler_versions": {
+    "cuda": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2026 NVIDIA Corporation\nBuilt on Tue_Sep_01_08:45:21_PDT_2026\nCuda compilation tools, release 13.4, V13.4.92\nBuild cuda_13.4.r13.4/compiler.38855100_0",
+    "hip": "AMD clang version 24.0.0git (https://github.com/ROCm/llvm-project.git d6f6cb691863e9258034ab48c1dfce21689d5606)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /workspace/scratch/4fc981d9ad56/toolchains/rocm/_rocm_sdk_devel/lib/llvm/bin\nConfiguration file: /workspace/scratch/4fc981d9ad56/toolchains/rocm/_rocm_sdk_devel/lib/llvm/bin/clang++.cfg"
+  },
+  "source_sha256": {
+    "baseline": {
+      "src/device_kernels.hpp": "0158f27c5528b6ccf12f128327d2a25ea14d680e05cefc24573c16b11d05751c",
+      "src/device_runtime.hpp": "2c439c3b4000308ad5cc4d28b0086f3c4ed786bd90bf5d354d7bee4fc07e3036",
+      "src/device_hip.hip": "65047fcd52c7292456e881b13dbb10f96cffc63ca786e7ae60528ac846f2401d",
+      "src/device_cuda.cu": "9a237fd1d0acaddceefb41e66312607323efce2fac6342e45b6a52922f0ff4ae",
+      "include/strix_lookahead/device.h": "5ae2434dcbcf13cd657ceaed7022c1d8ef774203e8ce2a031abb5bded402cb84"
+    },
+    "current": {
+      "src/device_kernels.hpp": "f85ca7a6bde58365ad3122886801261ec20624730030e01c9471e7b8df347ca1",
+      "src/device_runtime.hpp": "2c439c3b4000308ad5cc4d28b0086f3c4ed786bd90bf5d354d7bee4fc07e3036",
+      "src/device_hip.hip": "65047fcd52c7292456e881b13dbb10f96cffc63ca786e7ae60528ac846f2401d",
+      "src/device_cuda.cu": "9a237fd1d0acaddceefb41e66312607323efce2fac6342e45b6a52922f0ff4ae",
+      "include/strix_lookahead/device.h": "1994733a6e69953f33260a943ce20c5e5ddf934cc8cffad2255daaf044196749"
+    }
+  },
+  "hip_gfx1151": {
+    "pair_pass": {
+      "baseline": {
+        "sgpr": 34,
+        "vgpr": 29,
+        "waves_per_simd_estimate": 16,
+        "lds_bytes": 4096
+      },
+      "current": {
+        "sgpr": 34,
+        "vgpr": 29,
+        "waves_per_simd_estimate": 16,
+        "lds_bytes": 128
+      }
+    },
+    "pair_finish": {
+      "baseline": {
+        "sgpr": 15,
+        "vgpr": 13,
+        "waves_per_simd_estimate": 16,
+        "lds_bytes": 4096
+      },
+      "current": {
+        "sgpr": 15,
+        "vgpr": 15,
+        "waves_per_simd_estimate": 16,
+        "lds_bytes": 128
+      }
+    },
+    "scratch_bytes_per_lane": 0,
+    "sgpr_spills": 0,
+    "vgpr_spills": 0
+  },
+  "cuda_sm120": {
+    "pair_pass": {
+      "baseline": {
+        "registers": 40,
+        "shared_bytes": 4096
+      },
+      "current": {
+        "registers": 40,
+        "shared_bytes": 128
+      }
+    },
+    "pair_finish": {
+      "baseline": {
+        "registers": 25,
+        "shared_bytes": 4096
+      },
+      "current": {
+        "registers": 26,
+        "shared_bytes": 128
+      }
+    },
+    "stack_bytes": 0,
+    "spill_store_bytes": 0,
+    "spill_load_bytes": 0,
+    "occupancy_estimate": null
+  },
+  "notes": [
+    "HIP waves/SIMD is a compiler estimate, not observed hardware occupancy.",
+    "CUDA ptxas does not provide a runtime occupancy measurement here.",
+    "ptxas used 1 barriers denotes a barrier resource; it is not a count of synchronization operations executed."
+  ],
+  "compiler_runs": {
+    "baseline-hip-gfx1151": {
+      "command": [
+        "/workspace/scratch/4fc981d9ad56/toolchains/rocm/_rocm_sdk_devel/lib/llvm/bin/clang++",
+        "-c",
+        "/workspace/scratch/4fc981d9ad56/review-v02-baseline/src/device_hip.hip",
+        "-o",
+        "/workspace/scratch/4fc981d9ad56/strix-lookahead/build-gpu-resources-review/baseline-hip-gfx1151.o",
+        "-I/workspace/scratch/4fc981d9ad56/review-v02-baseline/include",
+        "-O3",
+        "-DNDEBUG",
+        "-std=gnu++20",
+        "--offload-arch=gfx1151",
+        "-fPIC",
+        "-ffp-contract=off",
+        "-fno-fast-math",
+        "-fno-gpu-flush-denormals-to-zero",
+        "-Rpass-analysis=kernel-resource-usage",
+        "-DUSE_PROF_API=1",
+        "-D__HIP_PLATFORM_AMD__=1",
+        "-D__HIP_ROCclr__=1"
+      ],
+      "output": "review-v02-baseline/src/device_kernels.hpp:95:0: Function Name: _ZN13sl_hip_device9pair_passENS_10model_viewEPKjPKfS4_jPNS_6winnerEPfS7_\nreview-v02-baseline/src/device_kernels.hpp:95:0:     TotalSGPRs: 34\nreview-v02-baseline/src/device_kernels.hpp:95:0:     VGPRs: 29\nreview-v02-baseline/src/device_kernels.hpp:95:0:     ScratchSize [bytes/lane]: 0\nreview-v02-baseline/src/device_kernels.hpp:95:0:     Dynamic Stack: False\nreview-v02-baseline/src/device_kernels.hpp:95:0:     Occupancy [waves/SIMD]: 16\nreview-v02-baseline/src/device_kernels.hpp:95:0:     SGPRs Spill: 0\nreview-v02-baseline/src/device_kernels.hpp:95:0:     VGPRs Spill: 0\nreview-v02-baseline/src/device_kernels.hpp:95:0:     LDS Size [bytes/block]: 4096\nreview-v02-baseline/src/device_kernels.hpp:175:0: Function Name: _ZN13sl_hip_device11pair_finishENS_10model_viewEPKjPKNS_6winnerEjP16sl_device_result\nreview-v02-baseline/src/device_kernels.hpp:175:0:     TotalSGPRs: 15\nreview-v02-baseline/src/device_kernels.hpp:175:0:     VGPRs: 13\nreview-v02-baseline/src/device_kernels.hpp:175:0:     ScratchSize [bytes/lane]: 0\nreview-v02-baseline/src/device_kernels.hpp:175:0:     Dynamic Stack: False\nreview-v02-baseline/src/device_kernels.hpp:175:0:     Occupancy [waves/SIMD]: 16\nreview-v02-baseline/src/device_kernels.hpp:175:0:     SGPRs Spill: 0\nreview-v02-baseline/src/device_kernels.hpp:175:0:     VGPRs Spill: 0\nreview-v02-baseline/src/device_kernels.hpp:175:0:     LDS Size [bytes/block]: 4096\n"
+    },
+    "baseline-cuda-sm120": {
+      "command": [
+        "/workspace/scratch/4fc981d9ad56/toolchains/python/nvidia/cu13/bin/nvcc",
+        "-c",
+        "/workspace/scratch/4fc981d9ad56/review-v02-baseline/src/device_cuda.cu",
+        "-o",
+        "/workspace/scratch/4fc981d9ad56/strix-lookahead/build-gpu-resources-review/baseline-cuda-sm120.o",
+        "-I/workspace/scratch/4fc981d9ad56/review-v02-baseline/include",
+        "-O3",
+        "-DNDEBUG",
+        "-std=c++20",
+        "-arch=sm_120",
+        "-Xcompiler=-fPIC",
+        "--fmad=false",
+        "--ftz=false",
+        "--resource-usage"
+      ],
+      "output": "ptxas info    : 0 bytes gmem\nptxas info    : Compiling entry function '_ZN14sl_cuda_device11pair_finishENS_10model_viewEPKjPKNS_6winnerEjP16sl_device_result' for 'sm_120'\nptxas info    : Function properties for _ZN14sl_cuda_device11pair_finishENS_10model_viewEPKjPKNS_6winnerEjP16sl_device_result\n    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads\nptxas info    : Used 25 registers, used 1 barriers, 4096 bytes smem\nptxas info    : Compile time = 17.814 ms\nptxas info    : Compiling entry function '_ZN14sl_cuda_device9pair_passENS_10model_viewEPKjPKfS4_jPNS_6winnerEPfS7_' for 'sm_120'\nptxas info    : Function properties for _ZN14sl_cuda_device9pair_passENS_10model_viewEPKjPKfS4_jPNS_6winnerEPfS7_\n    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads\nptxas info    : Used 40 registers, used 1 barriers, 4096 bytes smem\nptxas info    : Compile time = 93.677 ms\n"
+    },
+    "current-hip-gfx1151": {
+      "command": [
+        "/workspace/scratch/4fc981d9ad56/toolchains/rocm/_rocm_sdk_devel/lib/llvm/bin/clang++",
+        "-c",
+        "/workspace/scratch/4fc981d9ad56/strix-lookahead/src/device_hip.hip",
+        "-o",
+        "/workspace/scratch/4fc981d9ad56/strix-lookahead/build-gpu-resources-review/current-hip-gfx1151.o",
+        "-I/workspace/scratch/4fc981d9ad56/strix-lookahead/include",
+        "-O3",
+        "-DNDEBUG",
+        "-std=gnu++20",
+        "--offload-arch=gfx1151",
+        "-fPIC",
+        "-ffp-contract=off",
+        "-fno-fast-math",
+        "-fno-gpu-flush-denormals-to-zero",
+        "-Rpass-analysis=kernel-resource-usage",
+        "-DUSE_PROF_API=1",
+        "-D__HIP_PLATFORM_AMD__=1",
+        "-D__HIP_ROCclr__=1"
+      ],
+      "output": "src/device_kernels.hpp:131:0: Function Name: _ZN13sl_hip_device9pair_passENS_10model_viewEPKjPKfS4_jPNS_6winnerEPfS7_\nsrc/device_kernels.hpp:131:0:     TotalSGPRs: 34\nsrc/device_kernels.hpp:131:0:     VGPRs: 29\nsrc/device_kernels.hpp:131:0:     ScratchSize [bytes/lane]: 0\nsrc/device_kernels.hpp:131:0:     Dynamic Stack: False\nsrc/device_kernels.hpp:131:0:     Occupancy [waves/SIMD]: 16\nsrc/device_kernels.hpp:131:0:     SGPRs Spill: 0\nsrc/device_kernels.hpp:131:0:     VGPRs Spill: 0\nsrc/device_kernels.hpp:131:0:     LDS Size [bytes/block]: 128\nsrc/device_kernels.hpp:206:0: Function Name: _ZN13sl_hip_device11pair_finishENS_10model_viewEPKjPKNS_6winnerEjP16sl_device_result\nsrc/device_kernels.hpp:206:0:     TotalSGPRs: 15\nsrc/device_kernels.hpp:206:0:     VGPRs: 15\nsrc/device_kernels.hpp:206:0:     ScratchSize [bytes/lane]: 0\nsrc/device_kernels.hpp:206:0:     Dynamic Stack: False\nsrc/device_kernels.hpp:206:0:     Occupancy [waves/SIMD]: 16\nsrc/device_kernels.hpp:206:0:     SGPRs Spill: 0\nsrc/device_kernels.hpp:206:0:     VGPRs Spill: 0\nsrc/device_kernels.hpp:206:0:     LDS Size [bytes/block]: 128\n"
+    },
+    "current-cuda-sm120": {
+      "command": [
+        "/workspace/scratch/4fc981d9ad56/toolchains/python/nvidia/cu13/bin/nvcc",
+        "-c",
+        "/workspace/scratch/4fc981d9ad56/strix-lookahead/src/device_cuda.cu",
+        "-o",
+        "/workspace/scratch/4fc981d9ad56/strix-lookahead/build-gpu-resources-review/current-cuda-sm120.o",
+        "-I/workspace/scratch/4fc981d9ad56/strix-lookahead/include",
+        "-O3",
+        "-DNDEBUG",
+        "-std=c++20",
+        "-arch=sm_120",
+        "-Xcompiler=-fPIC",
+        "--fmad=false",
+        "--ftz=false",
+        "--resource-usage"
+      ],
+      "output": "ptxas info    : 0 bytes gmem\nptxas info    : Compiling entry function '_ZN14sl_cuda_device11pair_finishENS_10model_viewEPKjPKNS_6winnerEjP16sl_device_result' for 'sm_120'\nptxas info    : Function properties for _ZN14sl_cuda_device11pair_finishENS_10model_viewEPKjPKNS_6winnerEjP16sl_device_result\n    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads\nptxas info    : Used 26 registers, used 1 barriers, 128 bytes smem\nptxas info    : Compile time = 23.522 ms\nptxas info    : Compiling entry function '_ZN14sl_cuda_device9pair_passENS_10model_viewEPKjPKfS4_jPNS_6winnerEPfS7_' for 'sm_120'\nptxas info    : Function properties for _ZN14sl_cuda_device9pair_passENS_10model_viewEPKjPKfS4_jPNS_6winnerEPfS7_\n    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads\nptxas info    : Used 40 registers, used 1 barriers, 128 bytes smem\nptxas info    : Compile time = 132.305 ms\n"
+    }
+  }
+}

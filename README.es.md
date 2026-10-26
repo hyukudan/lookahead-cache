@@ -5,7 +5,7 @@ para Strix Halo y con backend CUDA independiente.**
 
 [English and build commands](README.md)
 
-La versión 0.2 implementa una cabeza de transiciones de rango 256, una caché de sus
+La versión 0.2.1 implementa una cabeza de transiciones de rango 256, una caché de sus
 vectores FP32 y un selector experimental con certificado matemático. El motor
 conserva la verificación, el estado del modelo y la corrección del muestreo.
 
@@ -28,6 +28,25 @@ del host dentro del encolado de un paso.
 Cada instancia fija los pesos y el vocabulario ordenado, y pertenece a un único
 stream. El crecimiento o cambio de ese vocabulario requiere sustituir la
 instancia. La capacidad cero permite comparar la misma operación sin caché.
+
+## Mejoras de la revisión 0.2.1
+
+- Se rechazan también los modos de redondeo SSE modificados por separado del
+  entorno x87. La regresión reproduce un caso que podía cambiar el token ganador.
+- La referencia CPU omite 129 sumas redundantes por producto de rango 256 y evita
+  convertir el embedding en un acierto si nadie solicita esa salida.
+- La reducción de ganadores HIP/CUDA utiliza 128 bytes de memoria compartida y
+  una barrera por bloque, frente a 4.096 bytes y nueve barreras. Las operaciones
+  que calculan las puntuaciones conservan su orden original. La ganancia temporal
+  en GPU sigue pendiente de medición física.
+- El certificado acepta también empates demostrablemente favorables por ID global,
+  sin cambiar el ganador ni añadir un recorrido del vocabulario durante la consulta.
+- Los colectores validan el contenido de los benchmarks, conservan los fallos y
+  registran huellas de los ejecutables. Una salida vacía, incompleta o inconsistente
+  ya no puede presentarse como una calificación superada.
+
+La [revisión técnica](docs/review-0.2.1.md) detalla los cambios, las mediciones y sus
+límites. La interfaz C y la política de caché siguen siendo compatibles.
 
 ## Pruebas reproducibles
 

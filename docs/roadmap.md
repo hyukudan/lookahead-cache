@@ -4,7 +4,7 @@
 
 The generic host LRU cache, rank-256 CPU pair reference, direct-mapped bias cache,
 greedy selector, lifecycle tests and synthetic component benchmark are implemented.
-An optional CPU selector supplies immutable snapshots, a strict candidate
+An optional CPU selector supplies immutable snapshots, an exact candidate
 certificate and a full-selection fallback.
 
 HIP and CUDA pair implementations compile. Both use a two-kernel step, device
@@ -12,6 +12,11 @@ cache lookup, coalesced hit reads, explicit publication and a capacity-zero
 comparison mode. They are experimental until executed and qualified on physical
 GPUs. The actual inference-engine adapter is not wired yet. Recorded evidence
 belongs in [validation](validation.md).
+
+The [0.2.1 review](review-0.2.1.md) closes an independent-SSE-rounding bug, removes
+unnecessary CPU arithmetic, reduces GPU winner-reduction resources and validates
+benchmark evidence and installed consumers. None of these changes closes the
+physical-device or engine-integration milestones below.
 
 ## First native milestone: Strix Halo
 

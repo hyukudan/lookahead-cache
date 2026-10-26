@@ -51,6 +51,11 @@ completion and check native asynchronous errors. A failed enqueue poisons the
 instance until a successful reset. Reset cannot guarantee recovery from a failed
 device context.
 
+Argument-validation failures leave the instance usable. A failed capture must be
+ended and discarded; reset cannot repair a partially captured step. Stop graph
+replays while an instance is poisoned: native graph launch bypasses the enqueue
+function's host-side guard. The integration owns that external replay lifecycle.
+
 Request `markov_out` when the confidence calculation needs the predecessor
 embedding. A cache hit must still populate it. The next predecessor may point to
 the previous output's token field, allowing device-side chaining without a host
@@ -110,3 +115,19 @@ asynchronous device-readiness contract.
 HIP/CUDA compilation is recorded separately from physical GPU qualification.
 Native model execution, graph replay, failure handling and end-to-end performance
 remain required integration gates.
+
+## Installed CMake consumer
+
+The installed C ABI can be linked from a project enabling only C and C++. GPU
+consumers still need the corresponding runtime SDK. The CUDA package dependency
+requires version 12.8 or newer, matching the library's stream-ownership API.
+
+After building, exercise installation and an independent C11 consumer with:
+
+```sh
+cmake -DSL_BUILD_DIR="$(pwd)/build-cpu" -P tests/install_consumer.cmake
+```
+
+For a non-default SDK, pass `SL_SDK_PREFIX_PATH` for HIP or
+`SL_CUDATOOLKIT_ROOT` for CUDA. The consumer links backend symbols without requiring
+a GPU language in its own project; this is a packaging check, not device execution.

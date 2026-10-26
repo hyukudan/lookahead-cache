@@ -39,6 +39,12 @@ FP32. Greedy selection prefers the lower global token ID on equal scores and
 ignores NaNs. The CPU reference requires round-to-nearest and gradual underflow.
 Compiler settings preserve the declared arithmetic.
 
+The CPU reference computes only the 31 butterfly additions that are ancestors of
+lane zero; the other 129 lane outputs do not contribute to its result. The operand
+order along every retained path is unchanged. On a cache hit, embedding conversion
+is omitted unless the caller requests the embedding output. Both x87 and SSE
+rounding controls are checked on x86 before any cache or statistics mutation.
+
 The pair cache uses a deterministic direct map from predecessor to slot. A
 collision replaces that slot's vector. Capacity zero executes the same operation
 without caching and provides a comparison or rollback configuration. Payload
@@ -60,6 +66,13 @@ Capacity zero retains the two-kernel execution shape. The enqueue path performs
 no allocation, host synchronization or device-to-host copy. Creation validates
 device token IDs through a one-time transfer. Reset and destruction may wait for
 the bound stream.
+
+Each kernel reduces already-computed winners through logical 32-thread subgroups,
+then eight shared partials. This uses 128 bytes of explicit shared storage and one
+block barrier, compared with 4,096 bytes and nine barriers in version 0.2. The
+reduction moves score/token/row tuples without changing score arithmetic. Unique
+global IDs make the tie-breaking independent of that reduction tree. These are
+resource counts, not a measured GPU speedup.
 
 One instance owns its workspace and belongs to one device and stream. External
 serialization and stream ordering protect publication and reuse. Captured graphs
@@ -84,8 +97,11 @@ the fixed pair operator.
 ## Optional certified selection
 
 The CPU selector owns copies of the vocabulary, base logits, candidate indices and
-bias values. It derives bounds from all excluded rows. A successful strict
-certificate proves the same winner as full selection; an inconclusive certificate
+bias values. It derives bounds from all excluded rows. A candidate score above the
+tail upper bound proves the winner. Equality also proves it when the candidate's
+global ID is lower than every excluded ID. The minimum excluded ID is computed
+once during preparation, so this tie check adds no vocabulary scan to a lookup.
+An inconclusive certificate
 requires the full fallback. This API rejects nonfinite inputs and overflow, unlike
 the pair operator's explicit infinity/NaN selection semantics.
 

@@ -13,7 +13,10 @@ This is a synthetic, single-thread component comparison. It does not run a model
 backbone, target verifier, tokenizer, model server, trained contextual corrector or
 an independently optimized inference engine.
 
-## Recorded CPU run
+## Historical CPU run, version 0.2
+
+This record describes the code at commit `7417c3f`, before the 0.2.1 review. Its
+source fingerprints are historical and are not fingerprints of the current tree.
 
 Hardware: AMD EPYC 9V74 host, one permitted CPU pinned. Build: GCC 13.3.0, Release
 `-O3`, strict FP32 operations. Shape: 129,280 candidates, rank 256, 16 cache slots,
@@ -47,6 +50,30 @@ python3 tools/run_cpu_benchmark.py \
 The wrapper refuses to overwrite an earlier record. Remove `--pin` on platforms
 without Linux CPU affinity. It uses only the Python standard library.
 
+## Review measurements, version 0.2.1
+
+The [paired revision comparison](../benchmarks/results/cpu-review-2026-10-26.json)
+uses the same benchmark source and compiler flags for the old and new CPU
+implementation. Three before/after pairs alternate execution order, with one CPU
+pinned, 32,768 candidates, 12 steps per repeat and three repeats per mode.
+Aggregating all four synthetic modes gives an old-time/new-time ratio of 1.062x
+for the uncached path and 1.100x for the cached path. Individual ratios range from
+0.989x to 1.142x; no uncertainty interval was estimated. These observations support
+a modest component improvement in this environment, not a universal speed factor.
+
+A [fresh full-vocabulary record](../benchmarks/results/cpu-129280-review-2026-10-26.json)
+exercises 129,280 candidates with the revised code and schema-2 collector. All
+outputs match. Its cached/uncached comparison is distinct from the old/new revision
+comparison; do not combine their ratios. The full-vocabulary warm case includes
+three misses and 33 hits, just as the historical CPU protocol does.
+
+Schema 2 preserves failed runs and validates each benchmark's declared scope,
+equivalence, dimensions, counts and timing consistency. It records source and
+executable SHA256 digests before and after execution and fails a run whose observed
+inputs change. Source snapshots identify the working tree; they do not establish
+that a binary was built from those sources. `build_source_binding: not_attested`
+states that limit explicitly. A binary digest identifies the executable measured.
+
 ## GPU measurement contract
 
 The HIP and CUDA executables compare the same two kernels with capacity zero and
@@ -75,6 +102,10 @@ Use `--backend cuda --build-dir build-cuda` for CUDA. The wrapper refuses to
 benchmark after failed or unavailable native correctness and never overwrites an
 existing record. An isolated SDK installation may require its runtime library
 directories on `LD_LIBRARY_PATH`, as documented by that installation.
+
+The review's HIP and CUDA records both remain `unavailable`, with native-test exit
+code 77 and no timing payload. Compiling reduced-memory kernels and linking them
+from a C11 consumer do not qualify execution or establish a GPU speedup.
 
 ## Why a hit can help
 

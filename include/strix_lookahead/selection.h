@@ -70,8 +70,10 @@ sl_status sl_selection_bias_destroy(sl_selection_bias* bias);
  * nontrapping floating-point environment. Ties select the smallest GLOBAL token
  * ID, independently of vocabulary or candidate order.
  *
- * certify is O(K): SL_OK means its strict upper-bound certificate proves the
- * same winner as full. SL_MISS means run full (including conservative overflow
+ * certify is O(K): SL_OK means its upper-bound certificate proves the same winner
+ * as full. Equality with the tail bound is accepted only when the candidate's
+ * global ID is lower than every excluded ID, so every possible tie also loses.
+ * SL_MISS means run full (including conservative overflow
  * of a loose bound). A finite lower bound also prevents hidden negative score
  * overflow. K=V has no tail and checks every score directly.
  *

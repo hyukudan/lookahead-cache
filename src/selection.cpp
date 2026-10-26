@@ -11,6 +11,10 @@
 #include <unordered_set>
 #include <vector>
 
+#if defined(__SSE__) || defined(_M_IX86) || defined(_M_X64)
+#include <xmmintrin.h>
+#endif
+
 #if defined(__FAST_MATH__)
 #error "Certified selection requires IEEE arithmetic; disable fast-math."
 #endif
@@ -32,6 +36,11 @@ bool finite(float value) noexcept {
 
 bool supported_arithmetic() noexcept {
     if (std::fegetround() != FE_TONEAREST) return false;
+#if defined(__SSE__) || defined(_M_IX86) || defined(_M_X64)
+    // fegetround can observe only the x87 control word. Callers can change
+    // MXCSR independently, so also reject SSE rounding, FTZ and DAZ modes.
+    if ((_mm_getcsr() & 0xe040U) != 0) return false;
+#endif
     // Volatile operands require runtime operations. Inspect their bits so the
     // check itself cannot treat a denormal as zero during a comparison.
     volatile float tiny = std::bit_cast<float>(std::uint32_t{1});
@@ -73,6 +82,7 @@ struct sl_selection_base {
     std::vector<std::uint32_t> candidates;
     float tail_max = 0.0F;
     float tail_min = 0.0F;
+    std::uint32_t tail_min_id = std::numeric_limits<std::uint32_t>::max();
     bool has_tail = false;
 };
 
@@ -160,6 +170,8 @@ sl_status sl_selection_base_create(const sl_selection_vocabulary* vocabulary,
             const float value = base->values[i];
             if (!finite(value)) return SL_INVALID_ARGUMENT;
             if (included[i] != 0) continue;
+            if (base->vocabulary->ids[i] < base->tail_min_id)
+                base->tail_min_id = base->vocabulary->ids[i];
             if (!base->has_tail) {
                 base->tail_max = value;
                 base->tail_min = value;
@@ -237,7 +249,12 @@ sl_status sl_selection_certify(const sl_selection_base* base,
     if (base->has_tail) {
         const float upper = add_fp32(base->tail_max, bias->maximum);
         const float lower = add_fp32(base->tail_min, bias->minimum);
-        if (!finite(upper) || !finite(lower) || !(best.score > upper)) return SL_MISS;
+        // Equality is sufficient only when every excluded global ID loses the
+        // tie. The minimum ID is prepared with the immutable tail, not supplied
+        // by a caller; this keeps the certificate exact and its lookup O(K).
+        const bool dominates = best.score > upper ||
+            (best.score == upper && best.token_id < base->tail_min_id);
+        if (!finite(upper) || !finite(lower) || !dominates) return SL_MISS;
     }
     *out = best;
     return SL_OK;

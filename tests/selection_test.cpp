@@ -13,7 +13,7 @@
 #include <random>
 #include <vector>
 
-#if defined(__SSE__)
+#if defined(__SSE__) || defined(_M_IX86) || defined(_M_X64)
 #include <xmmintrin.h>
 #endif
 
@@ -150,6 +150,46 @@ void signed_zero_and_subnormals() {
     CHECK(std::bit_cast<std::uint32_t>(full.score) == 2U);
 }
 
+void certified_tail_ties() {
+    // The lowest global ID is not the first row or first candidate. A loose
+    // bound ties the candidate winner, but every excluded token loses the tie.
+    auto vocab = vocabulary({90, 4, 12});
+    auto b = base(vocab, {1, 1, 1}, {1});
+    auto w = bias(vocab, {0, 0, 0});
+    sl_selection_result certified{}, full{};
+    EXPECT(sl_selection_certify(b.get(), w.get(), &certified), SL_OK);
+    EXPECT(sl_selection_full(b.get(), w.get(), &full), SL_OK);
+    CHECK(same(certified, full) && full.token_id == 4);
+
+    b = base(vocab, {1, 1, 1}, {0, 2});
+    EXPECT(sl_selection_certify(b.get(), w.get(), &certified), SL_MISS);
+    cleared(certified);
+
+    // A rounded upper bound is still safe: the winner has the smaller ID even
+    // when all mathematical half-ULP increments round to an equal FP32 score.
+    b = base(vocab, {1, 1, 1}, {1});
+    w = bias(vocab, {0x1p-24F, 0, 0x1p-24F});
+    EXPECT(sl_selection_certify(b.get(), w.get(), &certified), SL_OK);
+    EXPECT(sl_selection_full(b.get(), w.get(), &full), SL_OK);
+    CHECK(same(certified, full) && full.score == 1.0F);
+
+    // The winning candidate's negative-zero bits must survive certification.
+    b = base(vocab, {0.0F, -0.0F, 0.0F}, {1});
+    w = bias(vocab, {0.0F, -0.0F, 0.0F});
+    EXPECT(sl_selection_certify(b.get(), w.get(), &certified), SL_OK);
+    EXPECT(sl_selection_full(b.get(), w.get(), &full), SL_OK);
+    CHECK(same(certified, full));
+    CHECK(std::bit_cast<std::uint32_t>(full.score) == 0x80000000U);
+
+    // UINT32_MAX is a legal selection token ID, not an absent-tail sentinel.
+    vocab = vocabulary({UINT32_MAX, UINT32_MAX - 1U});
+    b = base(vocab, {2, 2}, {1});
+    w = bias(vocab, {0, 0});
+    EXPECT(sl_selection_certify(b.get(), w.get(), &certified), SL_OK);
+    EXPECT(sl_selection_full(b.get(), w.get(), &full), SL_OK);
+    CHECK(same(certified, full) && full.token_id == UINT32_MAX - 1U);
+}
+
 void invalid_arguments_and_mapping() {
     sl_selection_vocabulary* raw_vocab = nullptr;
     EXPECT(sl_selection_vocabulary_create(nullptr, 0, &raw_vocab), SL_INVALID_ARGUMENT);
@@ -255,15 +295,22 @@ void unsupported_arithmetic() {
         CHECK(raw == nullptr);
     }
     CHECK(std::fesetround(FE_TONEAREST) == 0);
-#if defined(__SSE__)
+#if defined(__SSE__) || defined(_M_IX86) || defined(_M_X64)
     struct Control {
         unsigned saved = _mm_getcsr();
         ~Control() { _mm_setcsr(saved); }
     } control;
-    for (const unsigned mode : {0x8000U, 0x0040U}) {
+    for (const unsigned mode : {0x8000U, 0x0040U, 0x2000U, 0x4000U, 0x6000U}) {
         _mm_setcsr(control.saved | mode);
         EXPECT(sl_selection_certify(b.get(), w.get(), &result), SL_INVALID_STATE);
         cleared(result);
+        EXPECT(sl_selection_full(b.get(), w.get(), &result), SL_INVALID_STATE);
+        const float values[]{0, 0};
+        sl_selection_base* raw_base = nullptr;
+        sl_selection_bias* raw_bias = nullptr;
+        EXPECT(sl_selection_base_create(vocab.get(), values, 2, nullptr, 0, &raw_base), SL_INVALID_STATE);
+        EXPECT(sl_selection_bias_create(vocab.get(), values, 2, &raw_bias), SL_INVALID_STATE);
+        CHECK(raw_base == nullptr && raw_bias == nullptr);
         _mm_setcsr(control.saved);
     }
 #endif
@@ -358,6 +405,7 @@ int main() {
         {"snapshot ownership and successful certificate", snapshot_and_certificate},
         {"fallback and global-ID ties", fallback_and_global_ties},
         {"signed zero and subnormal scores", signed_zero_and_subnormals},
+        {"certified global-ID tail ties", certified_tail_ties},
         {"invalid inputs and exact mapping identity", invalid_arguments_and_mapping},
         {"nonfinite inputs and score overflow", nonfinite_and_overflow},
         {"unsupported floating-point modes", unsupported_arithmetic},
@@ -376,6 +424,6 @@ int main() {
             return 1;
         }
     }
-    std::puts("8 certified-selection scenarios passed");
+    std::puts("9 certified-selection scenarios passed");
     return 0;
 }

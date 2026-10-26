@@ -3,13 +3,13 @@
 
 import argparse
 import datetime
-import hashlib
 import json
 import os
 from pathlib import Path
 import platform
-import subprocess
 import sys
+
+from evidence import finish_provenance, invoke, load_payload, provenance, validate_cpu
 
 
 def main():
@@ -33,21 +33,29 @@ def main():
     pinned_cpu = affinity[0] if args.pin else None
     if pinned_cpu is not None:
         os.sched_setaffinity(0, {pinned_cpu})
-    started = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    process = subprocess.run(command, text=True, capture_output=True, check=False)
-    if process.returncode:
-        sys.stderr.write(process.stderr)
-        raise RuntimeError(f"benchmark exited with status {process.returncode}")
-    result = json.loads(process.stdout)
-    if (result.get("all_outputs_equivalent") is not True
-            or result.get("end_to_end_inference") is not False
-            or result.get("device_measurement") is not False):
-        raise RuntimeError("benchmark did not return the expected CPU evidence contract")
     root = Path(__file__).resolve().parent.parent
-    source_paths = ["src/pair.cpp", "include/strix_lookahead/pair.h",
-                    "include/strix_lookahead/cache.h", "examples/pair_benchmark.cpp"]
-    source_hashes = {name: hashlib.sha256((root / name).read_bytes()).hexdigest()
-                     for name in source_paths}
+    source_paths = ["src/pair.cpp", "src/cache.cpp", "include/strix_lookahead/pair.h",
+                    "include/strix_lookahead/cache.h", "examples/pair_benchmark.cpp",
+                    "CMakeLists.txt", "Makefile", "tools/run_cpu_benchmark.py", "tools/evidence.py"]
+    source_paths = {name: root / name for name in source_paths}
+    executables = {executable.name: executable}
+    observed = provenance(source_paths, executables)
+    started = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    execution = invoke(command)
+    code = execution["exit_code"]
+    result = None
+    errors = []
+    if code == 0:
+        try:
+            result = load_payload(execution["stdout"])
+            validate_cpu(result)
+        except ValueError as error:
+            errors.append(str(error))
+            result = None
+            code = 1
+    errors.extend(finish_provenance(observed, source_paths, executables))
+    if errors:
+        code = 1
     cpu_model = platform.processor() or "unreported"
     cpuinfo = Path("/proc/cpuinfo")
     if cpuinfo.is_file():
@@ -62,14 +70,19 @@ def main():
                               for line in flags_file.read_text().splitlines()
                               if line.startswith("CXX_FLAGS =")), None)
     evidence = {
-        "schema_version": 1,
+        "schema_version": 2,
         "started_at_utc": started,
         "finished_at_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "hardware": {"cpu_model": cpu_model, "machine": platform.machine(),
                      "system": platform.system(), "pinned_cpu": pinned_cpu},
         "command": [executable.name, *extra],
         "library_compile_flags": compile_flags,
-        "source_sha256": source_hashes,
+        "library_compile_flags_origin": "Adjacent CMake flags.make when available; not a binary attestation.",
+        "provenance": observed,
+        "status": "passed" if code == 0 else "failed",
+        "collector_exit_code": code if 0 <= code <= 255 else 1,
+        "execution": execution,
+        "validation_errors": errors,
         "interpretation": "Synthetic CPU operator comparison against the same uncached reference; no LLM or GPU performance claim.",
         "result": result,
     }
@@ -78,13 +91,17 @@ def main():
     with output.open("x", encoding="utf-8") as handle:
         json.dump(evidence, handle, indent=2, allow_nan=False)
         handle.write("\n")
-    print(json.dumps({"output": str(output), "cpu_model": cpu_model,
-                      "all_outputs_equivalent": True, "modes": result["modes"]}, indent=2))
+    summary = {"output": str(output), "cpu_model": cpu_model,
+               "status": evidence["status"], "exit_code": code}
+    if code == 0:
+        summary.update(all_outputs_equivalent=True, modes=result["modes"])
+    print(json.dumps(summary, indent=2))
+    return code if 0 < code <= 255 else 1 if code else 0
 
 
 if __name__ == "__main__":
     try:
-        main()
+        sys.exit(main())
     except (OSError, ValueError, RuntimeError) as error:
         print(f"benchmark evidence: {error}", file=sys.stderr)
         sys.exit(1)

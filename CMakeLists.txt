@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(StrixLookahead VERSION 0.2.0 LANGUAGES C CXX)
+project(StrixLookahead VERSION 0.2.1 LANGUAGES C CXX)
 
 include(GNUInstallDirs)
 option(SL_ENABLE_HIP "Build the Strix Halo HIP backend" OFF)
@@ -66,6 +66,11 @@ if(BUILD_TESTING)
     set_target_properties(sl_c_api_smoke PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON LINKER_LANGUAGE CXX)
     target_link_libraries(sl_c_api_smoke PRIVATE StrixLookahead::cache)
     add_test(NAME c_abi_smoke COMMAND sl_c_api_smoke)
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME evidence_tools_contract
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/evidence_tools_test.py)
+    endif()
 endif()
 
 if(SL_BUILD_EXAMPLES)

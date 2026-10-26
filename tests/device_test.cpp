@@ -189,9 +189,13 @@ void test_layout(std::uint32_t layout, std::uint32_t capacity) {
     sl_device_result invalid_result{};
     f.result.download(&invalid_result, f.queue.value);
     f.queue.wait();
-    require(invalid_result.status == SL_INVALID_ARGUMENT && invalid_result.selection.token == UINT32_MAX,
+    require(invalid_result.status == SL_INVALID_ARGUMENT && invalid_result.selection.token == UINT32_MAX &&
+            invalid_result.selection.vocabulary_row == UINT32_MAX &&
+            std::bit_cast<std::uint32_t>(invalid_result.selection.score) == 0xff800000u &&
+            invalid_result.selection.cache_hit == 0,
             "invalid predecessor was not reported");
     std::fill(f.base.begin(), f.base.end(), 0.0f);
+    require(f.run(5).cache_hit == (capacity ? 1u : 0u), "invalid predecessor changed cached entries");
     f.chain(false);
     f.chain(true);
     check_status(SL_GPU_PAIR(query)(f.gpu->value), "query completed stream");
@@ -224,6 +228,150 @@ void subnormal_scores() {
     require(f.run(5).token == f.ids[17], "FP32 subnormal score was flushed on a hit");
 }
 
+void reduction_boundaries() {
+    // Exercise incomplete logical subgroups, block edges and an extra tile
+    // beyond the 512-block grid cap. Zero model values give an independent
+    // analytic oracle for every score, so the test does not repeat the GPU
+    // reduction implementation. Reversed IDs also separate row order from the
+    // required global-ID tie order.
+    for (const std::uint32_t count : {1u, 31u, 32u, 33u, 255u, 256u, 257u, 513u, 131073u}) {
+        stream queue;
+        std::vector<std::uint16_t> zeros(static_cast<std::size_t>(count) * SL_PAIR_RANK);
+        std::vector<std::uint32_t> ids(count);
+        std::vector<float> base(count, 0.0f);
+        for (std::uint32_t row = 0; row < count; ++row) ids[row] = count - 1u - row;
+        buffer<std::uint16_t> model(zeros.size());
+        buffer<std::uint32_t> mapping(count), predecessor(1);
+        buffer<float> logits(count);
+        buffer<sl_device_result> output(1);
+        model.upload(zeros.data(), queue.value);
+        mapping.upload(ids.data(), queue.value);
+        const std::uint32_t previous = 0;
+        predecessor.upload(&previous, queue.value);
+        sl_pair_config config{};
+        sl_pair_config_init(&config);
+        config.vocabulary_size = count;
+        config.embedding_rows = count;
+        config.capacity_entries = 2;
+        config.head_layout = SL_PAIR_HEAD_SELECTED;
+        // Immutable model arrays may share storage; outputs never alias them.
+        config.head = config.embeddings = model.data;
+        config.token_ids = mapping.data;
+        engine gpu(config, queue.value);
+        bool warm = false;
+        for (const std::uint32_t wanted : {0u, std::min(31u, count - 1u),
+                std::min(32u, count - 1u), std::min(255u, count - 1u),
+                std::min(256u, count - 1u), count - 1u}) {
+            std::fill(base.begin(), base.end(), -1.0f);
+            base[wanted] = 1.0f;
+            logits.upload(base.data(), queue.value);
+            gpu.enqueue(predecessor.data, logits.data, nullptr, count, output.data);
+            sl_device_result result{};
+            output.download(&result, queue.value);
+            queue.wait();
+            require(result.status == SL_OK && result.selection.token == ids[wanted] &&
+                    result.selection.vocabulary_row == wanted && result.selection.score == 1.0f,
+                    "ragged/grid-stride winner mismatch");
+            require(result.selection.cache_hit == (warm ? 1u : 0u), "boundary cache state differs");
+            warm = true;
+        }
+        std::fill(base.begin(), base.end(), 0.0f);
+        logits.upload(base.data(), queue.value);
+        gpu.enqueue(predecessor.data, logits.data, nullptr, count, output.data);
+        sl_device_result tied{};
+        output.download(&tied, queue.value);
+        queue.wait();
+        require(tied.status == SL_OK && tied.selection.token == 0 &&
+                tied.selection.vocabulary_row == count - 1u,
+                "boundary tie did not select lower global ID");
+    }
+}
+
+void capture_lifecycle() {
+    fixture f(SL_PAIR_HEAD_GLOBAL);
+    require(f.run(5).cache_hit == 0, "capture prefill should miss");
+    auto device_config = f.config;
+    device_config.head = f.device_weights.data;
+    device_config.embeddings = f.device_embeddings.data;
+    device_config.token_ids = f.device_ids.data;
+    check(SL_GPU_RUNTIME(StreamBeginCapture)(f.queue.value, SL_GPU_CAPTURE_MODE), "begin lifecycle capture");
+    SL_GPU_ENGINE* rejected = nullptr;
+    const auto create_status = SL_GPU_PAIR(create)(&device_config, reinterpret_cast<void*>(f.queue.value), &rejected);
+    const auto reset_status = SL_GPU_PAIR(reset)(f.gpu->value);
+    const auto query_status = SL_GPU_PAIR(query)(f.gpu->value);
+    const auto destroy_status = SL_GPU_PAIR(destroy)(f.gpu->value);
+    // Rejected lifecycle calls must leave capture and the live handle usable.
+    if (destroy_status == SL_INVALID_STATE)
+        f.gpu->enqueue(f.predecessor.data, f.base_head.data, nullptr, vocabulary,
+                       f.result.data, f.markov.data, f.bias.data);
+    else if (destroy_status == SL_OK || destroy_status == SL_DEVICE_ERROR)
+        f.gpu->value = nullptr;
+    SL_GPU_GRAPH graph{};
+    check(SL_GPU_RUNTIME(StreamEndCapture)(f.queue.value, &graph), "end lifecycle capture");
+    if (rejected) (void)SL_GPU_PAIR(destroy)(rejected);
+    require(create_status == SL_INVALID_STATE && rejected == nullptr &&
+            reset_status == SL_INVALID_STATE && query_status == SL_INVALID_STATE &&
+            destroy_status == SL_INVALID_STATE, "lifecycle operation was allowed during capture");
+    SL_GPU_GRAPH_EXEC executable{};
+    check(SL_GPU_RUNTIME(GraphInstantiateWithFlags)(&executable, graph, 0), "instantiate lifecycle graph");
+    check(SL_GPU_RUNTIME(GraphLaunch)(executable, f.queue.value), "launch lifecycle graph");
+    std::vector<float> expected_markov(SL_PAIR_RANK), expected_bias(vocabulary);
+    sl_pair_result expected{};
+    const auto status = sl_pair_step(f.cpu, 5, f.base.data(), &expected,
+                                    expected_markov.data(), expected_bias.data());
+    f.compare(status, expected, expected_markov, expected_bias);
+    check(SL_GPU_RUNTIME(GraphExecDestroy)(executable), "destroy lifecycle graph executable");
+    check(SL_GPU_RUNTIME(GraphDestroy)(graph), "destroy lifecycle graph");
+    f.reset();
+    require(f.run(5).cache_hit == 0, "post-capture reset did not clear cache");
+}
+
+void validation_and_device_ownership() {
+    fixture f(SL_PAIR_HEAD_GLOBAL);
+    require(SL_GPU_PAIR(enqueue_step)(f.gpu->value, nullptr, f.base_head.data, nullptr,
+                vocabulary, f.result.data, nullptr, nullptr) == SL_INVALID_ARGUMENT,
+            "null predecessor was accepted");
+    require(SL_GPU_PAIR(enqueue_step)(f.gpu->value, f.predecessor.data, f.base_head.data, nullptr,
+                vocabulary + 1u, f.result.data, nullptr, nullptr) == SL_INVALID_ARGUMENT,
+            "invalid split was accepted");
+    require(SL_GPU_PAIR(enqueue_step)(f.gpu->value, f.predecessor.data, nullptr, nullptr,
+                vocabulary, f.result.data, nullptr, nullptr) == SL_INVALID_ARGUMENT,
+            "missing base segment was accepted");
+    require(f.run(5).cache_hit == 0, "argument validation poisoned engine or changed cache");
+    int count = 0;
+    check(SL_GPU_RUNTIME(GetDeviceCount)(&count), "query ownership device count");
+    if (count < 2) {
+        std::printf("INFO %s cross-device ownership check unavailable: fewer than two devices\n", SL_GPU_LABEL);
+        return;
+    }
+    int original = -1;
+    check(SL_GPU_RUNTIME(GetDevice)(&original), "query original device");
+    check(SL_GPU_RUNTIME(SetDevice)((original + 1) % count), "select other device");
+    auto device_config = f.config;
+    device_config.head = f.device_weights.data;
+    device_config.embeddings = f.device_embeddings.data;
+    device_config.token_ids = f.device_ids.data;
+    SL_GPU_ENGINE* rejected = nullptr;
+    const auto create_status = SL_GPU_PAIR(create)(&device_config,
+        reinterpret_cast<void*>(f.queue.value), &rejected);
+    // Restore before testing results, so fixture cleanup always runs on its
+    // owning device if one of the assertions fails.
+    const auto query_status = SL_GPU_PAIR(query)(f.gpu->value);
+    const auto reset_status = SL_GPU_PAIR(reset)(f.gpu->value);
+    const auto destroy_status = SL_GPU_PAIR(destroy)(f.gpu->value);
+    const auto enqueue_status = destroy_status == SL_INVALID_ARGUMENT ?
+        SL_GPU_PAIR(enqueue_step)(f.gpu->value, f.predecessor.data, f.base_head.data,
+                                 nullptr, vocabulary, f.result.data, nullptr, nullptr) : SL_INVALID_STATE;
+    if (destroy_status == SL_OK || destroy_status == SL_DEVICE_ERROR) f.gpu->value = nullptr;
+    if (rejected) (void)SL_GPU_PAIR(destroy)(rejected);
+    check(SL_GPU_RUNTIME(SetDevice)(original), "restore original device");
+    require(create_status == SL_INVALID_ARGUMENT && rejected == nullptr &&
+            query_status == SL_INVALID_ARGUMENT && reset_status == SL_INVALID_ARGUMENT &&
+            destroy_status == SL_INVALID_ARGUMENT && enqueue_status == SL_INVALID_ARGUMENT,
+            "wrong-current-device call was not rejected");
+    require(f.run(5).cache_hit == 1, "wrong-device call poisoned engine or changed cache");
+}
+
 }  // namespace
 
 int main() {
@@ -238,7 +386,10 @@ int main() {
         test_layout(SL_PAIR_HEAD_GLOBAL, 0);
         invalid_mapping();
         subnormal_scores();
-        std::printf("PASS %s device qualification: exact finite bias/embedding/score, cache lifecycle, mapping, NaN/ties, chaining and graph replay\n", SL_GPU_LABEL);
+        reduction_boundaries();
+        capture_lifecycle();
+        validation_and_device_ownership();
+        std::printf("PASS %s device qualification: exact finite bias/embedding/score, cache lifecycle, mapping, NaN/ties, ragged/grid-stride reductions, chaining and graph replay\n", SL_GPU_LABEL);
         return 0;
     } catch (const std::exception& error) {
         std::fprintf(stderr, "FAIL %s device qualification: %s\n", SL_GPU_LABEL, error.what());

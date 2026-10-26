@@ -75,8 +75,9 @@ sl_status sl_pair_create(const sl_pair_config* config, sl_pair_engine** out);
  * its bias computation and cache publication still complete. An out-of-range
  * predecessor returns SL_INVALID_ARGUMENT without touching cache/statistics.
  * Round-to-nearest and gradual underflow are required. A different host rounding
- * mode, or x86 FTZ/DAZ mode, returns SL_INVALID_STATE without changing the cache
- * or statistics. On other architectures the caller ensures gradual underflow.
+ * mode (including independently set x86 SSE rounding), or x86 FTZ/DAZ mode,
+ * returns SL_INVALID_STATE without changing the cache or statistics. On other
+ * architectures the caller ensures gradual underflow.
  * Output is ready when this synchronous reference call returns. */
 sl_status sl_pair_step(sl_pair_engine* engine, uint32_t predecessor,
                        const float* base_logits, sl_pair_result* out,

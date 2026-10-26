@@ -3,18 +3,11 @@
 
 import argparse
 import datetime
-import hashlib
 import json
 from pathlib import Path
-import subprocess
 import sys
 
-
-def invoke(command):
-    process = subprocess.run(command, text=True, capture_output=True, check=False)
-    return {"command": [Path(command[0]).name, *command[1:]],
-            "exit_code": process.returncode, "stdout": process.stdout,
-            "stderr": process.stderr}
+from evidence import finish_provenance, invoke, load_payload, provenance, validate_device
 
 
 def main():
@@ -38,17 +31,21 @@ def main():
     suffix = "hip.hip" if args.backend == "hip" else "cuda.cu"
     sources = ["include/strix_lookahead/cache.h", "include/strix_lookahead/pair.h",
                "include/strix_lookahead/device.h", "src/pair.cpp",
+               "src/cache.cpp",
                f"src/device_{suffix}", "src/device_kernels.hpp",
                "src/device_runtime.hpp", "support/device_runtime.hpp",
-               "tests/device_test.cpp", "examples/device_benchmark.cpp"]
+               "tests/device_test.cpp", "examples/device_benchmark.cpp",
+               "CMakeLists.txt", "tools/qualify_device.py", "tools/evidence.py"]
+    source_paths = {name: root / name for name in sources}
+    executables = {test.name: test, benchmark.name: benchmark}
     record = {
-        "schema_version": 1, "backend": args.backend,
+        "schema_version": 2, "backend": args.backend,
         "started_at_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-        "source_sha256": {name: hashlib.sha256((root / name).read_bytes()).hexdigest()
-                          for name in sources},
+        "provenance": provenance(source_paths, executables),
         "end_to_end_inference": False,
         "correctness": invoke([str(test)]),
         "benchmark": None,
+        "validation_errors": [],
     }
     code = record["correctness"]["exit_code"]
     if code == 0:
@@ -56,10 +53,16 @@ def main():
         code = record["benchmark"]["exit_code"]
         if code == 0:
             try:
-                payload = json.loads(record["benchmark"]["stdout"])
+                payload = load_payload(record["benchmark"]["stdout"])
+                validate_device(payload, args.backend)
+                record["benchmark"]["result"] = payload
             except ValueError as error:
-                raise RuntimeError("benchmark did not return valid JSON") from error
-            record["benchmark"]["result"] = payload
+                record["validation_errors"].append(str(error))
+                code = 1
+    record["validation_errors"].extend(finish_provenance(record["provenance"], source_paths, executables))
+    if record["validation_errors"]:
+        code = 1
+    record["qualification_exit_code"] = code if 0 <= code <= 255 else 1
     record["status"] = "passed" if code == 0 else "unavailable" if code == 77 else "failed"
     record["finished_at_utc"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
     args.output.parent.mkdir(parents=True, exist_ok=True)

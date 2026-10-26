@@ -1,5 +1,6 @@
 #include "strix_lookahead/pair.h"
 
+#include <algorithm>
 #include <array>
 #include <bit>
 #include <cfenv>
@@ -182,6 +183,104 @@ void butterfly_order_cancellation() {
     CHECK(result.cache_hit == 1 && bits(bias) == bits(0.0F));
 }
 
+// Separate oracle: decode finite halves using powers of two, and execute the
+// complete five-stage 32-lane butterfly, including unobserved upper lanes.
+float oracle_half(std::uint16_t encoded) {
+    const auto exponent = static_cast<unsigned>((encoded >> 10U) & 31U);
+    const auto fraction = static_cast<unsigned>(encoded & 1023U);
+    if (exponent == 31U) {
+        const auto sign = static_cast<std::uint32_t>(encoded & 0x8000U) << 16U;
+        return std::bit_cast<float>(sign | 0x7f800000U | (fraction << 13U) |
+                                    (fraction == 0U ? 0U : 0x00400000U));
+    }
+    const auto magnitude = exponent == 0U
+        ? std::ldexp(static_cast<float>(fraction), -24)
+        : std::ldexp(static_cast<float>(1024U + fraction), static_cast<int>(exponent) - 25);
+    return (encoded & 0x8000U) == 0U ? magnitude : -magnitude;
+}
+
+float oracle_dot(const std::uint16_t* head, const std::uint16_t* embedding) {
+    std::array<float, 32> lanes{};
+    for (std::size_t lane = 0; lane < lanes.size(); ++lane) {
+        for (std::size_t k = 0; k < 8; ++k) {
+            const auto index = lane * 8 + k;
+            const volatile float product = oracle_half(head[index]) * oracle_half(embedding[index]);
+            const volatile float sum = lanes[lane] + product;
+            lanes[lane] = sum;
+        }
+    }
+    for (std::size_t distance = 16; distance != 0; distance /= 2) {
+        std::array<float, 32> next{};
+        for (std::size_t lane = 0; lane < lanes.size(); ++lane) {
+            const volatile float sum = lanes[lane] + lanes[lane ^ distance];
+            next[lane] = sum;
+        }
+        lanes = next;
+    }
+    return lanes[0];
+}
+
+void full_butterfly_and_all_binary16_encodings() {
+    constexpr std::uint32_t rows = 16;
+    constexpr std::uint32_t predecessors = 256;
+    std::vector<std::uint16_t> head(rows * SL_PAIR_RANK);
+    std::vector<std::uint16_t> embeddings(predecessors * SL_PAIR_RANK);
+    std::array<std::uint32_t, rows> ids{};
+    std::array<float, rows> base{}, actual_bias{}, expected_bias{};
+    std::array<float, SL_PAIR_RANK> markov{};
+    std::uint32_t random = 0x72616e6bU;
+    for (auto& value : head) {
+        random ^= random << 13U; random ^= random >> 17U; random ^= random << 5U;
+        value = static_cast<std::uint16_t>(random & 0xffffU);
+        if ((value & 0x7c00U) == 0x7c00U) value ^= 0x0400U;
+    }
+    // Zero signs, unit values, subnormals, infinities and quiet/signaling NaNs.
+    constexpr std::uint16_t special[] = {0, 0x8000, 0x3c00, 0x0001, 0x7c00, 0xfc00, 0x7e35, 0x7c35};
+    for (std::uint32_t row = 0; row < std::size(special); ++row)
+        std::fill_n(head.begin() + row * SL_PAIR_RANK, SL_PAIR_RANK, special[row]);
+    for (std::size_t i = 0; i < embeddings.size(); ++i) embeddings[i] = static_cast<std::uint16_t>(i);
+    for (std::uint32_t row = 0; row < rows; ++row) {
+        ids[row] = 17U * (rows - 1U - row);
+        base[row] = static_cast<float>(static_cast<int>(row) - 8) / 16.0F;
+    }
+    sl_pair_config config{};
+    sl_pair_config_init(&config);
+    config.vocabulary_size = rows;
+    config.embedding_rows = predecessors;
+    config.head_layout = SL_PAIR_HEAD_SELECTED;
+    config.head = head.data();
+    config.embeddings = embeddings.data();
+    config.token_ids = ids.data();
+    auto engine = create(config);
+    for (std::uint32_t predecessor = 0; predecessor < predecessors; ++predecessor) {
+        const auto* encoded = embeddings.data() + predecessor * SL_PAIR_RANK;
+        sl_pair_result expected{absent, absent, -std::numeric_limits<float>::infinity(), 0};
+        for (std::uint32_t row = 0; row < rows; ++row) {
+            expected_bias[row] = oracle_dot(head.data() + row * SL_PAIR_RANK, encoded);
+            const volatile float score = base[row] + expected_bias[row];
+            if (score > expected.score || (score == expected.score && ids[row] < expected.token))
+                expected = {ids[row], row, score, 0};
+        }
+        const auto status = expected.token == absent ? SL_INVALID_STATE : SL_OK;
+        for (std::uint32_t repetition = 0; repetition < 2; ++repetition) {
+            sl_pair_result actual{};
+            // Exercise hits with and without predecessor diagnostics.
+            const bool emit_markov = repetition == 0U || (predecessor % 2U == 0U);
+            STATUS(sl_pair_step(engine.get(), predecessor, base.data(), &actual,
+                                emit_markov ? markov.data() : nullptr, actual_bias.data()), status);
+            CHECK(actual.token == expected.token && actual.vocabulary_row == expected.vocabulary_row);
+            CHECK(bits(actual.score) == bits(expected.score) && actual.cache_hit == repetition);
+            for (std::uint32_t row = 0; row < rows; ++row) {
+                if (std::isnan(expected_bias[row])) CHECK(std::isnan(actual_bias[row]));
+                else CHECK(bits(actual_bias[row]) == bits(expected_bias[row]));
+            }
+            if (emit_markov)
+                for (std::uint32_t k = 0; k < SL_PAIR_RANK; ++k)
+                    CHECK(bits(markov[k]) == bits(oracle_half(encoded[k])));
+        }
+    }
+}
+
 void collision_reset_and_uncached_path() {
     Fixture f;
     auto engine = create(f.config);
@@ -229,6 +328,13 @@ void invalid_predecessor_and_fp_environment() {
     const float base[3] = {0, 0, 0};
     sl_pair_result result{};
     STATUS(sl_pair_step(engine.get(), 0, base, &result, nullptr, nullptr), SL_OK);
+#if defined(__SSE__) || defined(_M_IX86) || defined(_M_X64)
+    // 0.75 ULP at a bias of 256: nearest picks ID 7, while SSE round-down
+    // would collapse its advantage into a tie and incorrectly select ID 2.
+    const float rounding_sensitive_base[3] = {0x1.8p-16F, 0, 0};
+    STATUS(sl_pair_step(engine.get(), 0, rounding_sensitive_base, &result, nullptr, nullptr), SL_OK);
+    CHECK(result.token == 7 && bits(result.score) == bits(256.0F) + 1U);
+#endif
     const auto before = stats(engine.get());
     std::array<float, SL_PAIR_RANK> markov{};
     std::array<float, 3> bias{};
@@ -245,6 +351,14 @@ void invalid_predecessor_and_fp_environment() {
         CHECK(equal_stats(stats(engine.get()), before));
     }
 #if defined(__SSE__) || defined(_M_IX86) || defined(_M_X64)
+    {
+        FpEnvironment restore;
+        // Set only SSE rounding; on glibc fegetround() still reports the
+        // nearest x87 mode. The pair contract must reject either mismatch.
+        _mm_setcsr((_mm_getcsr() & ~0x6000U) | 0x2000U);
+        STATUS(sl_pair_step(engine.get(), 0, rounding_sensitive_base, &result, nullptr, nullptr), SL_INVALID_STATE);
+        CHECK(equal_stats(stats(engine.get()), before));
+    }
     {
         FpEnvironment restore;
         _mm_setcsr(_mm_getcsr() | 0x8040U);
@@ -317,6 +431,7 @@ int main() {
         {"infinity, NaNs and global tie order", infinity_nan_and_global_tie_order},
         {"binary16 subnormals and embedding conversion", binary16_subnormal_and_embedding_conversion},
         {"butterfly-order cancellation", butterfly_order_cancellation},
+        {"full butterfly and all binary16 encodings", full_butterfly_and_all_binary16_encodings},
         {"collision, reset and uncached path", collision_reset_and_uncached_path},
         {"invalid predecessor and FP environment", invalid_predecessor_and_fp_environment},
         {"invalid configurations", invalid_configurations},

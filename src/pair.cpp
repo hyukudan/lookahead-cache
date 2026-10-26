@@ -89,12 +89,13 @@ float pair_dot(const std::uint16_t* head, const float* embedding) noexcept {
         }
         lanes[lane] = sum;
     }
-    for (std::uint32_t distance = 16U; distance != 0U; distance /= 2U) {
-        float next[32];
-        for (std::uint32_t lane = 0; lane < 32U; ++lane)
-            next[lane] = rounded_add(lanes[lane], lanes[lane ^ distance]);
-        std::memcpy(lanes, next, sizeof(lanes));
-    }
+    // Only lane 0 is observable. At each butterfly stage, its remaining
+    // ancestors occupy the lower half; the upper-half outputs cannot reach
+    // lane 0 at any subsequent (smaller-distance) stage. Keep the exact
+    // operand order of those 31 additions and omit the other 129 additions.
+    for (std::uint32_t distance = 16U; distance != 0U; distance /= 2U)
+        for (std::uint32_t lane = 0; lane < distance; ++lane)
+            lanes[lane] = rounded_add(lanes[lane], lanes[lane + distance]);
     return lanes[0];
 }
 
@@ -105,8 +106,10 @@ sl_pair_result empty_result() noexcept {
 bool supported_fp_environment() noexcept {
     if (std::fegetround() != FE_TONEAREST) return false;
 #if defined(__SSE__) || defined(_M_IX86) || defined(_M_X64)
-    // Reject FTZ/DAZ rather than silently changing the numerical identity.
-    if ((_mm_getcsr() & 0x8040U) != 0U) return false;
+    // fegetround may report only the x87 rounding mode. SSE has its own
+    // rounding-control bits, independently writable by an integrating engine.
+    // Reject non-nearest SSE rounding as well as FTZ/DAZ.
+    if ((_mm_getcsr() & 0xe040U) != 0U) return false;
 #endif
     return true;
 }
@@ -202,15 +205,17 @@ sl_status sl_pair_step(sl_pair_engine* engine, std::uint32_t predecessor,
     if (predecessor >= c.embedding_rows) return SL_INVALID_ARGUMENT;
     if (!supported_fp_environment()) return SL_INVALID_STATE;
 
-    float embedding[SL_PAIR_RANK];
-    const auto* encoded_embedding = c.embeddings + static_cast<std::size_t>(predecessor) * SL_PAIR_RANK;
-    for (std::uint32_t k = 0; k < SL_PAIR_RANK; ++k) embedding[k] = binary16(encoded_embedding[k]);
-    if (markov_out != nullptr) std::memcpy(markov_out, embedding, sizeof(embedding));
-
     const auto slot = sl_pair_slot_for(predecessor, c.capacity_entries);
     const bool hit = c.capacity_entries != 0 && engine->valid[slot] != 0 && engine->keys[slot] == predecessor;
     float* cached = c.capacity_entries == 0 ? nullptr
         : engine->payload.get() + static_cast<std::size_t>(slot) * c.vocabulary_size;
+
+    float embedding[SL_PAIR_RANK];
+    if (!hit || markov_out != nullptr) {
+        const auto* encoded_embedding = c.embeddings + static_cast<std::size_t>(predecessor) * SL_PAIR_RANK;
+        for (std::uint32_t k = 0; k < SL_PAIR_RANK; ++k) embedding[k] = binary16(encoded_embedding[k]);
+        if (markov_out != nullptr) std::memcpy(markov_out, embedding, sizeof(embedding));
+    }
     increment(engine->stats.steps);
     increment(hit ? engine->stats.hits : engine->stats.misses);
     if (!hit) increment(engine->stats.bias_rows_computed, c.vocabulary_size);

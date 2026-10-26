@@ -4,7 +4,7 @@
 
 [Español](README.es.md)
 
-Version 0.2 implements a static rank-256 transition head, its cached execution path,
+Version 0.2.1 implements a static rank-256 transition head, its cached execution path,
 and an experimental certified selector. The first hardware target is Strix Halo
 (`gfx1151`, HIP); a CUDA implementation shares the same numerical and ownership
 contract. The inference engine retains target verification, model state and sampling.
@@ -17,13 +17,21 @@ contract. The inference engine retains target verification, model state and samp
 | Rank-256 pair head | Binary16 weights, FP32 arithmetic, ordered candidate vocabulary, direct-mapped bias cache | CPU equivalence tests and synthetic component measurements |
 | HIP pair head | Device-resident cache, coalesced hits, two kernels per step | Compiled for `gfx1151`; native execution pending |
 | CUDA pair head | Same contract and two-kernel structure | Compiled for `sm_86`, `sm_89`, `sm_120`; native execution pending |
-| Certified sparse selection | Immutable validated inputs, strict upper-bound certificate, full-scan fallback | CPU exhaustive and randomized checks |
+| Certified sparse selection | Immutable validated inputs, exact upper-bound and tie certificate, full-scan fallback | CPU exhaustive and randomized checks |
 | Engine integration and full-model comparison | Adapter contract documented | Not yet wired or measured |
 
 The project is a technical preview. The device kernels are real implementations;
 there is no CPU fallback presented as GPU execution. Synthetic CPU measurements
 compare the same reference arithmetic with and without caching. They do not measure
 full-model inference or establish an advantage over a trained drafting system.
+
+## Review changes in 0.2.1
+
+The [technical review](docs/review-0.2.1.md) fixes independent SSE rounding-mode
+validation, removes redundant CPU butterfly work, reduces GPU winner-reduction
+shared storage and barriers, accepts provably winning certificate ties, and
+hardens measurement validation and installed-package checks. The C ABI, cache
+mapping and two-kernel execution contract remain compatible.
 
 ## Build and test on CPU
 
@@ -40,6 +48,9 @@ ctest --test-dir build-cpu --output-on-failure
 The Makefile also supports `make test`, `make example`, and `make benchmark`.
 Floating-point contraction and fast-math optimizations are disabled deliberately
 to preserve the reference numerical profile.
+
+When Python 3 is available, CTest also runs the evidence-collector regression
+suite. Python is not a runtime dependency of the library.
 
 ## Build for Strix Halo
 

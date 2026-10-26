@@ -8,7 +8,7 @@ CFLAGS ?= -O2 -g
 CFLAGS += -std=c11 -Wall -Wextra -Wpedantic
 BUILD_DIR ?= build-make
 
-.PHONY: all test example benchmark clean
+.PHONY: all test test-tools example benchmark clean
 all: $(BUILD_DIR)/libstrix_lookahead.a
 
 $(BUILD_DIR):
@@ -35,7 +35,7 @@ $(BUILD_DIR)/sl_pair_test: tests/pair_test.cpp $(BUILD_DIR)/libstrix_lookahead.a
 $(BUILD_DIR)/sl_selection_test: tests/selection_test.cpp $(BUILD_DIR)/libstrix_lookahead.a
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $< $(BUILD_DIR)/libstrix_lookahead.a $(LDFLAGS) -o $@
 
-$(BUILD_DIR)/c_api_smoke.o: tests/c_api_smoke.c include/strix_lookahead/cache.h | $(BUILD_DIR)
+$(BUILD_DIR)/c_api_smoke.o: tests/c_api_smoke.c include/strix_lookahead/cache.h include/strix_lookahead/pair.h include/strix_lookahead/selection.h include/strix_lookahead/device.h | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/sl_c_api_smoke: $(BUILD_DIR)/c_api_smoke.o $(BUILD_DIR)/libstrix_lookahead.a
@@ -49,6 +49,9 @@ test: $(BUILD_DIR)/sl_cache_test $(BUILD_DIR)/sl_pair_test $(BUILD_DIR)/sl_selec
 	$(BUILD_DIR)/sl_pair_test
 	$(BUILD_DIR)/sl_selection_test
 	$(BUILD_DIR)/sl_c_api_smoke
+
+test-tools:
+	python3 tests/evidence_tools_test.py
 
 example: $(BUILD_DIR)/sl_cache_example
 	$(BUILD_DIR)/sl_cache_example
